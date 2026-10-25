@@ -35,7 +35,7 @@ interface EmployerRow {
   reviewEvents: (ReviewEvent | null)[];
 }
 
-const EMPLOYER_QUERY = `MATCH (c:Company)-[:HAS_ACCOUNT]->(a:EmployerAccount)
+const EMPLOYER_QUERY = `MATCH (c:Company {collegeId: $collegeId})-[:HAS_ACCOUNT]->(a:EmployerAccount {collegeId: $collegeId})
 WHERE ($id IS NULL OR a.id = $id)
   AND ($status IS NULL OR a.approvalStatus = $status)
   AND ($q = '' OR toLower(c.name) CONTAINS $q OR toLower(a.email) CONTAINS $q)
@@ -54,33 +54,41 @@ const mapEmployer = (row: EmployerRow): EmployerDetail => ({
 });
 
 export const employerRepository = {
-  async register(input: {
-    email: string;
-    passwordHash: string;
-    companyName: string;
-    website: string | null;
-    contactPersonName: string;
-    contactPhone: string;
-    companyEmail: string;
-    description: string | null;
-  }): Promise<{ employerId: string; companyId: string }> {
+  async register(
+    input: {
+      email: string;
+      passwordHash: string;
+      companyName: string;
+      website: string | null;
+      contactPersonName: string;
+      contactPhone: string;
+      companyEmail: string;
+      description: string | null;
+    },
+    collegeId: string,
+  ): Promise<{ employerId: string; companyId: string }> {
     const companyId = newId('cmp');
     const employerId = newId('emp');
     const now = nowIso();
 
     await withTransaction(async (tx) => {
-      await tx.run(
-        `CREATE (c:Company {
+      const result = await tx.run(
+        `MATCH (college:College {id: $collegeId})
+         CREATE (c:Company {
            id: $companyId, name: $companyName, website: $website, contactPersonName: $contactPersonName,
            contactPhone: $contactPhone, contactEmail: $companyEmail, description: $description,
-           createdAt: $now, updatedAt: $now
+           collegeId: $collegeId, createdAt: $now, updatedAt: $now
          })
          CREATE (a:EmployerAccount {
            id: $employerId, email: $email, passwordHash: $passwordHash, approvalStatus: 'PENDING',
-           reviewNote: null, reviewedAt: null, createdAt: $now
+           reviewNote: null, reviewedAt: null, collegeId: $collegeId, createdAt: $now
          })
-         CREATE (c)-[:HAS_ACCOUNT]->(a)`,
+         CREATE (c)-[:HAS_ACCOUNT]->(a)
+         CREATE (c)-[:BELONGS_TO]->(college)
+         CREATE (a)-[:BELONGS_TO]->(college)
+         RETURN c.id AS id`,
         {
+          collegeId,
           companyId,
           employerId,
           email: input.email,
@@ -94,39 +102,51 @@ export const employerRepository = {
           now,
         },
       );
+      if (result.records.length === 0) {
+        throw new Error('College not found');
+      }
     });
 
     return { employerId, companyId };
   },
 
-  async getDetail(employerId: string): Promise<EmployerDetail | null> {
-    const rows = await readQuery<EmployerRow>(EMPLOYER_QUERY, { id: employerId, status: null, q: '' });
+  async getDetail(employerId: string, collegeId: string): Promise<EmployerDetail | null> {
+    const rows = await readQuery<EmployerRow>(EMPLOYER_QUERY, { id: employerId, status: null, q: '', collegeId });
     const mapped = rows.map(mapEmployer);
     return mapped[0] ?? null;
   },
 
-  async list(params: { status: EmployerApprovalStatus | null; q: string }): Promise<EmployerDetail[]> {
-    const rows = await readQuery<EmployerRow>(EMPLOYER_QUERY, { id: null, status: params.status, q: params.q });
+  async list(params: { collegeId: string; status: EmployerApprovalStatus | null; q: string }): Promise<EmployerDetail[]> {
+    const rows = await readQuery<EmployerRow>(EMPLOYER_QUERY, {
+      id: null,
+      status: params.status,
+      q: params.q,
+      collegeId: params.collegeId,
+    });
     return rows.map(mapEmployer);
   },
 
-  async countByStatus(status: EmployerApprovalStatus): Promise<number> {
-    const row = await readOne<{ total: number }>('MATCH (a:EmployerAccount {approvalStatus: $status}) RETURN count(a) AS total', { status });
+  async countByStatus(collegeId: string, status: EmployerApprovalStatus): Promise<number> {
+    const row = await readOne<{ total: number }>(
+      'MATCH (a:EmployerAccount {collegeId: $collegeId, approvalStatus: $status}) RETURN count(a) AS total',
+      { collegeId, status },
+    );
     return row?.total ?? 0;
   },
 
-  async updateCompany(employerId: string, props: Record<string, unknown>): Promise<boolean> {
+  async updateCompany(employerId: string, collegeId: string, props: Record<string, unknown>): Promise<boolean> {
     const rows = await writeQuery<{ id: string }>(
-      `MATCH (c:Company)-[:HAS_ACCOUNT]->(a:EmployerAccount {id: $employerId})
+      `MATCH (c:Company {collegeId: $collegeId})-[:HAS_ACCOUNT]->(a:EmployerAccount {id: $employerId, collegeId: $collegeId})
        SET c += $props, c.updatedAt = $now
        RETURN c.id AS id`,
-      { employerId, props, now: nowIso() },
+      { employerId, collegeId, props, now: nowIso() },
     );
     return rows.length > 0;
   },
 
   async setApprovalStatus(input: {
     employerId: string;
+    collegeId: string;
     status: EmployerApprovalStatus;
     note: string | null;
     adminId: string;
@@ -134,9 +154,9 @@ export const employerRepository = {
     const now = nowIso();
     return withTransaction(async (tx) => {
       const result = await tx.run(
-        `MATCH (c:Company)-[:HAS_ACCOUNT]->(a:EmployerAccount {id: $employerId})
+        `MATCH (c:Company {collegeId: $collegeId})-[:HAS_ACCOUNT]->(a:EmployerAccount {id: $employerId, collegeId: $collegeId})
          RETURN a.approvalStatus AS previousStatus, c.name AS companyName`,
-        { employerId: input.employerId },
+        { employerId: input.employerId, collegeId: input.collegeId },
       );
       const record = result.records[0];
       if (!record) return null;
@@ -144,7 +164,7 @@ export const employerRepository = {
       const companyName = record.get('companyName') as string;
 
       await tx.run(
-        `MATCH (a:EmployerAccount {id: $employerId})
+        `MATCH (a:EmployerAccount {id: $employerId, collegeId: $collegeId})
          SET a.approvalStatus = $status, a.reviewNote = $note, a.reviewedAt = $now, a.reviewedByAdminId = $adminId
          CREATE (ev:ReviewEvent {
            id: $eventId, action: $action, fromStatus: $previousStatus, toStatus: $status,
@@ -153,6 +173,7 @@ export const employerRepository = {
          CREATE (a)-[:HAS_REVIEW_EVENT]->(ev)`,
         {
           employerId: input.employerId,
+          collegeId: input.collegeId,
           status: input.status,
           note: input.note,
           now,
@@ -167,10 +188,10 @@ export const employerRepository = {
     });
   },
 
-  async getApprovalStatus(employerId: string): Promise<EmployerApprovalStatus | null> {
+  async getApprovalStatus(employerId: string, collegeId: string): Promise<EmployerApprovalStatus | null> {
     const row = await readOne<{ approvalStatus: EmployerApprovalStatus }>(
-      'MATCH (a:EmployerAccount {id: $employerId}) RETURN a.approvalStatus AS approvalStatus',
-      { employerId },
+      'MATCH (a:EmployerAccount {id: $employerId, collegeId: $collegeId}) RETURN a.approvalStatus AS approvalStatus',
+      { employerId, collegeId },
     );
     return row?.approvalStatus ?? null;
   },

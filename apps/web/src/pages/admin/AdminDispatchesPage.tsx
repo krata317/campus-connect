@@ -34,7 +34,7 @@ export const AdminDispatchesPage = () => {
             <EmptyState
               icon={<BellRing className="h-6 w-6" />}
               title="No dispatches yet"
-              description="Open an approved request, choose a role, review eligible candidates and confirm a dispatch."
+              description="Open an approved request, choose a role, review eligible students and confirm a dispatch."
               action={
                 <Link to="/admin/requests" className={cn(buttonVariants({ size: 'sm' }))}>
                   Go to requests

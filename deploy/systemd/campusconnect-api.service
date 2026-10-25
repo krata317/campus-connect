@@ -1,0 +1,65 @@
+# ---------------------------------------------------------------------------
+# CampusConnect — systemd unit for the compiled Express API
+#
+# Install:
+#   sudo cp deploy/systemd/campusconnect-api.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now campusconnect-api
+#   sudo systemctl status campusconnect-api
+#   journalctl -u campusconnect-api -f          # live logs
+#
+# The service runs the compiled output (apps/api/dist/index.js), not tsx, so
+# production never needs the TypeScript toolchain at runtime.
+# ---------------------------------------------------------------------------
+
+[Unit]
+Description=CampusConnect API (Express + Neo4j)
+Documentation=file:///opt/campusconnect/DEPLOYMENT.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=campusconnect
+Group=campusconnect
+WorkingDirectory=/opt/campusconnect
+
+# Secrets and connection details live here, outside the repository.
+EnvironmentFile=/opt/campusconnect/.env
+Environment=NODE_ENV=production
+
+ExecStart=/usr/bin/node /opt/campusconnect/apps/api/dist/index.js
+
+# The API stays up when Neo4j is briefly unavailable (AuraDB Free pauses after
+# inactivity) and reports itself unready on /api/health/ready instead of
+# crash-looping. Restart only covers genuine process failures.
+Restart=on-failure
+RestartSec=5
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# Graceful shutdown: the API closes the HTTP server and the Neo4j driver on
+# SIGTERM, so 20 seconds is plenty.
+TimeoutStopSec=20
+KillSignal=SIGTERM
+
+# --- Hardening ------------------------------------------------------------
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/campusconnect
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+# The API only makes outbound Bolt connections to AuraDB.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=campusconnect-api
+
+[Install]
+WantedBy=multi-user.target

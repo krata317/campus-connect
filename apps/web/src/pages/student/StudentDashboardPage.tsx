@@ -4,6 +4,7 @@ import { ArrowRight, BellRing, BookOpen, Briefcase, UserRound } from 'lucide-rea
 import type { StudentDashboard } from '@campusconnect/shared';
 import { api, errorMessage } from '@/lib/api';
 import { dashboardQueryKey } from '@/hooks/useStudent';
+import { useCurrentUser } from '@/hooks/useAuth';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,6 +17,7 @@ export const StudentDashboardPage = () => {
     queryKey: dashboardQueryKey,
     queryFn: () => api.get<StudentDashboard>('/students/me/dashboard'),
   });
+  const { user } = useCurrentUser();
 
   if (dashboard.isLoading) return <LoadingState label="Loading your dashboard" />;
   if (dashboard.isError) return <ErrorState message={errorMessage(dashboard.error)} onRetry={() => dashboard.refetch()} />;
@@ -29,7 +31,11 @@ export const StudentDashboardPage = () => {
     <div className="space-y-6">
       <PageHeader
         title={`Welcome, ${data.profile.fullName.split(' ')[0]}`}
-        description="Keep your profile accurate — the placement cell evaluates these records when a company submits a hiring request."
+        description={
+          user?.college
+            ? `${user.college.name} · keep your profile accurate — the placement cell evaluates these records when a recruiter submits a hiring request.`
+            : 'Keep your profile accurate — the placement cell evaluates these records when a recruiter submits a hiring request.'
+        }
         actions={
           <Link to="/student/profile" className={cn(buttonVariants())}>
             Edit profile

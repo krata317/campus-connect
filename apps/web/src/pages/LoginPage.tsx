@@ -17,8 +17,8 @@ type RoleTab = 'STUDENT' | 'EMPLOYER' | 'ADMIN';
 
 const tabs: { value: RoleTab; label: string; hint: string }[] = [
   { value: 'STUDENT', label: 'Student', hint: 'Student portal' },
-  { value: 'EMPLOYER', label: 'Employer', hint: 'Company portal' },
-  { value: 'ADMIN', label: 'Administrator', hint: 'Placement cell' },
+  { value: 'EMPLOYER', label: 'Recruiter', hint: 'Recruiter portal' },
+  { value: 'ADMIN', label: 'Administrator', hint: 'College administrator' },
 ];
 
 export const LoginPage = () => {
@@ -98,13 +98,13 @@ export const LoginPage = () => {
           </Link>
         </p>
         <p>
-          Hiring from a company?{' '}
+          Hiring from a college?{' '}
           <Link to="/register/employer" className="font-medium text-navy-700 hover:underline">
-            Register your company
+            Register as a recruiter
           </Link>
         </p>
         <p className="text-xs">
-          Administrator accounts are created with the one-time bootstrap command, not through this page.
+          Administrator accounts are created by the college's onboarding command, not through this page.
         </p>
       </div>
     </div>

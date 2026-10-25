@@ -11,6 +11,7 @@
     "db:check": "tsx src/scripts/db-check.ts",
     "db:init": "tsx src/scripts/init-db.ts",
     "db:test-setup": "tsx src/scripts/create-test-db.ts",
+    "db:migrate-tenants": "tsx src/scripts/migrate-tenants.ts",
     "admin:bootstrap": "tsx src/scripts/bootstrap-admin.ts",
     "test": "vitest run",
     "test:watch": "vitest",

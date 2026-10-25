@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, BellRing, Building2, ClipboardCheck, GraduationCap, ListChecks } from 'lucide-react';
 import type { AdminStats } from '@campusconnect/shared';
 import { api, errorMessage } from '@/lib/api';
+import { useCurrentUser } from '@/hooks/useAuth';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,13 +12,14 @@ import { cn } from '@/lib/utils';
 
 const statCards = [
   { key: 'students', label: 'Students', icon: GraduationCap, to: '/admin/students' },
-  { key: 'pendingEmployers', label: 'Employers awaiting approval', icon: Building2, to: '/admin/employers' },
+  { key: 'pendingEmployers', label: 'Recruiters awaiting approval', icon: Building2, to: '/admin/employers' },
   { key: 'requestsAwaitingReview', label: 'Requests awaiting review', icon: ClipboardCheck, to: '/admin/requests' },
   { key: 'notificationsSent', label: 'Notifications sent', icon: BellRing, to: '/admin/dispatches' },
 ] as const;
 
 export const AdminDashboardPage = () => {
   const stats = useQuery({ queryKey: ['admin', 'stats'], queryFn: () => api.get<AdminStats>('/admin/stats') });
+  const { user } = useCurrentUser();
 
   if (stats.isLoading) return <LoadingState label="Loading placement overview" />;
   if (stats.isError) return <ErrorState message={errorMessage(stats.error)} onRetry={() => stats.refetch()} />;
@@ -27,17 +29,17 @@ export const AdminDashboardPage = () => {
   const setupSteps = [
     {
       title: 'Build the skill catalogue',
-      body: 'Students and employers can only choose skills you have created. Add the skills your college actually teaches.',
+      body: 'Students and recruiters can only choose skills you have created. Add the skills this college actually teaches.',
       done: data.skills > 0,
       to: '/admin/skills',
       cta: 'Manage skills',
     },
     {
-      title: 'Approve employer accounts',
-      body: 'Employers stay read-only until you approve them. Review the company details before granting access.',
+      title: 'Approve recruiter accounts',
+      body: 'Recruiters stay read-only until you approve them. Review the company details before granting access.',
       done: data.approvedEmployers > 0,
       to: '/admin/employers',
-      cta: 'Review employers',
+      cta: 'Review recruiters',
     },
     {
       title: 'Review hiring requests',
@@ -48,7 +50,7 @@ export const AdminDashboardPage = () => {
     },
     {
       title: 'Dispatch a shortlist',
-      body: 'Open a role, check eligibility against real student data, choose candidates and confirm the dispatch.',
+      body: 'Open a role, check eligibility against real student data, choose students and confirm the dispatch.',
       done: data.dispatches > 0,
       to: '/admin/dispatches',
       cta: 'Dispatch history',
@@ -58,8 +60,8 @@ export const AdminDashboardPage = () => {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Placement overview"
-        description="Live counts from the database. Nothing on this page is pre-filled sample data."
+        title={user?.college?.name ?? 'Placement overview'}
+        description="Live counts for your college only. Nothing on this page is pre-filled sample data."
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -120,7 +122,7 @@ export const AdminDashboardPage = () => {
                 <Badge variant={data.skills > 0 ? 'success' : 'warning'}>{data.skills > 0 ? 'Ready' : 'Empty'}</Badge>
               </div>
               <div className="rounded-md border border-border p-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Approved employers</p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Approved recruiters</p>
                 <p className="mt-1 text-lg font-semibold text-navy-900">{data.approvedEmployers}</p>
                 <Badge variant={data.approvedEmployers > 0 ? 'success' : 'warning'}>
                   {data.approvedEmployers > 0 ? 'Ready' : 'None yet'}

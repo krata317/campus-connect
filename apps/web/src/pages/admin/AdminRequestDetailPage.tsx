@@ -75,7 +75,7 @@ export const AdminRequestDetailPage = () => {
           <CardHeader>
             <CardTitle>Review decision</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Approving unlocks candidate filtering and shortlist dispatch for every role in this request.
+              Approving unlocks student filtering and shortlist dispatch for every role in this request.
             </p>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
@@ -168,10 +168,10 @@ export const AdminRequestDetailPage = () => {
                     className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), data.status !== 'APPROVED' ? 'pointer-events-none opacity-50' : '')}
                   >
                     <Users className="h-3.5 w-3.5" />
-                    Candidates & shortlist
+                    Students & shortlist
                   </Link>
                   {data.status !== 'APPROVED' ? (
-                    <p className="text-xs text-muted-foreground">Approve the request to enable candidate filtering.</p>
+                    <p className="text-xs text-muted-foreground">Approve the request to enable student filtering.</p>
                   ) : null}
                 </div>
               </div>

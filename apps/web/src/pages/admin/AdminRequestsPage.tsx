@@ -44,7 +44,7 @@ export const AdminRequestsPage = () => {
     <div className="space-y-5">
       <PageHeader
         title="Hiring requests"
-        description="Approve a request to unlock shortlisting for its roles, or return it to the employer with a note."
+        description="Approve a request to unlock shortlisting for its roles, or return it to the recruiter with a note."
       />
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -90,7 +90,7 @@ export const AdminRequestsPage = () => {
             <EmptyState
               icon={<ClipboardCheck className="h-6 w-6" />}
               title="No requests in this view"
-              description="Requests appear here once an approved employer submits them."
+              description="Requests appear here once an approved recruiter submits them."
             />
           </CardContent>
         </Card>

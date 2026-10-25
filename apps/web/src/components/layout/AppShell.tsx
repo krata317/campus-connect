@@ -44,9 +44,9 @@ export const AppShell = ({
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-navy-100 text-navy-900">
             <ShieldCheck className="h-4 w-4" />
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="text-sm font-semibold text-white">CampusConnect</p>
-            <p className="text-xs text-navy-300">{roleLabel}</p>
+            <p className="truncate text-xs text-navy-300">{user?.college?.name ?? roleLabel}</p>
           </div>
         </div>
 
@@ -90,8 +90,9 @@ export const AppShell = ({
               <ShieldCheck className="h-5 w-5 text-navy-800" />
               <span className="text-sm font-semibold text-navy-900">CampusConnect</span>
             </Link>
-            <div className="hidden items-center gap-2 lg:flex">
+            <div className="hidden min-w-0 items-center gap-2 lg:flex">
               <Badge variant="info">{roleLabel}</Badge>
+              {user?.college ? <span className="truncate text-sm font-medium text-navy-800">{user.college.name}</span> : null}
             </div>
             <div className="flex items-center gap-3">
               <span className="hidden text-sm text-muted-foreground sm:inline">{user?.displayName}</span>

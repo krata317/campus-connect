@@ -4,7 +4,7 @@ import { companyUpdateSchema, hiringRequestSubmitSchema } from '@campusconnect/s
 import { employerService } from '../services/employer.service';
 import { requestService } from '../services/request.service';
 import { asyncHandler, parseBody } from '../lib/validation';
-import { currentUser, requireApprovedEmployer, requireAuth, requireRole } from '../middleware/auth';
+import { currentCollegeId, currentUser, requireApprovedEmployer, requireAuth, requireRole } from '../middleware/auth';
 import { requestRepository } from '../repositories/request.repository';
 import { notFound } from '../lib/errors';
 
@@ -32,7 +32,7 @@ employerRouter.use(requireAuth, requireRole('EMPLOYER'));
 employerRouter.get(
   '/me/company',
   asyncHandler(async (req, res) => {
-    const detail = await employerService.getMyCompany(currentUser(req).id);
+    const detail = await employerService.getMyCompany(currentUser(req).id, currentCollegeId(req));
     res.json(detail);
   }),
 );
@@ -41,7 +41,7 @@ employerRouter.put(
   '/me/company',
   asyncHandler(async (req, res) => {
     const body = parseBody(companyUpdateSchema, req.body);
-    const detail = await employerService.updateCompany(currentUser(req).id, {
+    const detail = await employerService.updateCompany(currentUser(req).id, currentCollegeId(req), {
       name: body.name,
       website: body.website ?? null,
       contactPersonName: body.contactPersonName,
@@ -56,7 +56,12 @@ employerRouter.put(
 employerRouter.get(
   '/me/requests',
   asyncHandler(async (req, res) => {
-    const items = await requestService.list({ employerId: currentUser(req).id, status: null, q: '' });
+    const items = await requestService.list({
+      collegeId: currentCollegeId(req),
+      employerId: currentUser(req).id,
+      status: null,
+      q: '',
+    });
     res.json({ items });
   }),
 );
@@ -66,7 +71,7 @@ employerRouter.post(
   requireApprovedEmployer,
   asyncHandler(async (req, res) => {
     const body = parseBody(hiringRequestSubmitSchema, req.body);
-    const request = await requestService.create(currentUser(req).id, toRequestInput(body), body.submit);
+    const request = await requestService.create(currentUser(req).id, currentCollegeId(req), toRequestInput(body), body.submit);
     res.status(201).json({ request });
   }),
 );
@@ -76,9 +81,10 @@ employerRouter.get(
   asyncHandler(async (req, res) => {
     const { id } = parseBody(idParams, req.params);
     const employerId = currentUser(req).id;
-    const owns = await requestRepository.belongsToEmployer(id, employerId);
+    const collegeId = currentCollegeId(req);
+    const owns = await requestRepository.belongsToEmployer(id, employerId, collegeId);
     if (!owns) throw notFound('Hiring request not found');
-    const request = await requestService.getById(id);
+    const request = await requestService.getById(id, collegeId);
     res.json({ request });
   }),
 );
@@ -89,7 +95,7 @@ employerRouter.put(
   asyncHandler(async (req, res) => {
     const { id } = parseBody(idParams, req.params);
     const body = parseBody(hiringRequestSubmitSchema, req.body);
-    const request = await requestService.update(currentUser(req).id, id, toRequestInput(body));
+    const request = await requestService.update(currentUser(req).id, currentCollegeId(req), id, toRequestInput(body));
     res.json({ request });
   }),
 );
@@ -99,7 +105,7 @@ employerRouter.post(
   requireApprovedEmployer,
   asyncHandler(async (req, res) => {
     const { id } = parseBody(idParams, req.params);
-    const request = await requestService.submit(currentUser(req).id, id);
+    const request = await requestService.submit(currentUser(req).id, currentCollegeId(req), id);
     res.json({ request });
   }),
 );
@@ -109,7 +115,7 @@ employerRouter.delete(
   requireApprovedEmployer,
   asyncHandler(async (req, res) => {
     const { id } = parseBody(idParams, req.params);
-    await requestService.remove(currentUser(req).id, id);
+    await requestService.remove(currentUser(req).id, currentCollegeId(req), id);
     res.status(204).end();
   }),
 );

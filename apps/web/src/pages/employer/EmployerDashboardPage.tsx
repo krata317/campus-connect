@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Building2, ClipboardList, Plus } from 'lucide-react';
 import type { EmployerCompany, HiringRequest } from '@campusconnect/shared';
 import { api, errorMessage } from '@/lib/api';
+import { useCurrentUser } from '@/hooks/useAuth';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,6 +12,7 @@ import { TD, TH, TBody, THead, TR, Table, TableWrap } from '@/components/ui/tabl
 import { cn, formatDate, statusLabel, statusTone } from '@/lib/utils';
 
 export const EmployerDashboardPage = () => {
+  const { user } = useCurrentUser();
   const company = useQuery({
     queryKey: ['employer', 'company'],
     queryFn: () => api.get<EmployerCompany>('/employer/me/company'),
@@ -21,7 +23,7 @@ export const EmployerDashboardPage = () => {
     queryFn: () => api.get<{ items: HiringRequest[] }>('/employer/me/requests').then((response) => response.items),
   });
 
-  if (company.isLoading || requests.isLoading) return <LoadingState label="Loading your employer workspace" />;
+  if (company.isLoading || requests.isLoading) return <LoadingState label="Loading your recruiter workspace" />;
   if (company.isError) return <ErrorState message={errorMessage(company.error)} onRetry={() => company.refetch()} />;
   if (requests.isError) return <ErrorState message={errorMessage(requests.error)} onRetry={() => requests.refetch()} />;
 
@@ -40,7 +42,11 @@ export const EmployerDashboardPage = () => {
     <div className="space-y-5">
       <PageHeader
         title={detail.company.name}
-        description="Track your approval status, submit hiring requests and follow their review."
+        description={
+          user?.college
+            ? `Hiring from ${user.college.name} · track your approval status, submit hiring requests and follow their review.`
+            : 'Track your approval status, submit hiring requests and follow their review.'
+        }
         actions={
           approved ? (
             <Link to="/employer/requests/new" className={cn(buttonVariants())}>

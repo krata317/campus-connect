@@ -7,8 +7,8 @@ const actionLabel = (action: string): string =>
     REQUEST_APPROVED: 'Approved',
     REQUEST_REJECTED: 'Rejected',
     REQUEST_CHANGES_REQUESTED: 'Changes requested',
-    EMPLOYER_APPROVED: 'Employer approved',
-    EMPLOYER_REJECTED: 'Employer rejected',
+    EMPLOYER_APPROVED: 'Recruiter approved',
+    EMPLOYER_REJECTED: 'Recruiter rejected',
   })[action] ?? action;
 
 export const ReviewHistory = ({ events }: { events: ReviewEvent[] }) => {

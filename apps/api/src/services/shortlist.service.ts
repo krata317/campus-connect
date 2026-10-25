@@ -24,30 +24,30 @@ const composeMessage = (params: {
 }): string => {
   const parts = [`The college placement cell has shortlisted you for the role of ${params.roleTitle} at ${params.companyName}.`];
   if (params.assessmentInstructions) {
-    parts.push(`Assessment details from the employer: ${params.assessmentInstructions}`);
+    parts.push(`Assessment details from the recruiter: ${params.assessmentInstructions}`);
   }
   if (params.adminMessage) {
     parts.push(params.adminMessage);
   }
   parts.push(
-    'This notification records a college nomination. It is not a job offer — use the registration link below to complete the employer’s own application process.',
+    'This notification records a college nomination. It is not a job offer — use the registration link below to complete the recruiter’s own application process.',
   );
   return parts.join('\n\n');
 };
 
 export const shortlistService = {
-  async getRoleContext(roleId: string) {
-    const context = await requestRepository.getRoleContext(roleId);
+  async getRoleContext(roleId: string, collegeId: string) {
+    const context = await requestRepository.getRoleContext(roleId, collegeId);
     if (!context) throw notFound('Job role not found');
     return context;
   },
 
-  async getCandidates(roleId: string, eligibleOnly: boolean): Promise<CandidateListResult> {
-    const context = await this.getRoleContext(roleId);
+  async getCandidates(roleId: string, collegeId: string, eligibleOnly: boolean): Promise<CandidateListResult> {
+    const context = await this.getRoleContext(roleId, collegeId);
     const [skills, students, shortlist] = await Promise.all([
-      skillRepository.list({ q: '', activeOnly: false }),
-      studentRepository.listForEvaluation(),
-      shortlistRepository.listForRole(roleId),
+      skillRepository.list(collegeId, { q: '', activeOnly: false }),
+      studentRepository.listForEvaluation(collegeId),
+      shortlistRepository.listForRole(roleId, collegeId),
     ]);
 
     const nameMap = buildSkillNameMap(skills);
@@ -78,21 +78,21 @@ export const shortlistService = {
     };
   },
 
-  async saveShortlist(roleId: string, studentIds: string[], adminId: string) {
-    const context = await this.getRoleContext(roleId);
+  async saveShortlist(roleId: string, collegeId: string, studentIds: string[], adminId: string) {
+    const context = await this.getRoleContext(roleId, collegeId);
     if (context.request.status !== 'APPROVED') {
       throw conflict('Only approved hiring requests can be shortlisted');
     }
     const unique = [...new Set(studentIds)];
-    const saved = await shortlistRepository.replaceShortlist(roleId, unique, adminId);
+    const saved = await shortlistRepository.replaceShortlist(roleId, collegeId, unique, adminId);
     if (saved !== unique.length) {
-      throw badRequest('One or more selected students no longer exist');
+      throw badRequest('One or more selected students are not part of this college');
     }
-    return { count: saved, entries: await shortlistRepository.listForRole(roleId) };
+    return { count: saved, entries: await shortlistRepository.listForRole(roleId, collegeId) };
   },
 
-  async dispatch(input: { roleId: string; studentIds: string[]; adminId: string; message: string | null }) {
-    const context = await this.getRoleContext(input.roleId);
+  async dispatch(input: { roleId: string; collegeId: string; studentIds: string[]; adminId: string; message: string | null }) {
+    const context = await this.getRoleContext(input.roleId, input.collegeId);
     if (context.request.status !== 'APPROVED') {
       throw conflict('Only approved hiring requests can be dispatched');
     }
@@ -106,15 +106,15 @@ export const shortlistService = {
     }
 
     const [skills, students] = await Promise.all([
-      skillRepository.list({ q: '', activeOnly: false }),
-      studentRepository.listForEvaluation(),
+      skillRepository.list(input.collegeId, { q: '', activeOnly: false }),
+      studentRepository.listForEvaluation(input.collegeId),
     ]);
     const nameMap = buildSkillNameMap(skills);
     const byId = new Map(students.map((student) => [student.id, student]));
 
     const missingStudents = unique.filter((id) => !byId.has(id));
     if (missingStudents.length > 0) {
-      throw badRequest('One or more selected students no longer exist');
+      throw badRequest('One or more selected students are not part of this college');
     }
 
     const ineligible = unique
@@ -138,6 +138,7 @@ export const shortlistService = {
 
     const result = await shortlistRepository.dispatch({
       roleId: input.roleId,
+      collegeId: input.collegeId,
       studentIds: unique,
       adminId: input.adminId,
       title: `Shortlisted for ${context.role.title} at ${context.company.name}`,
@@ -149,16 +150,16 @@ export const shortlistService = {
       roleTitle: result.roleTitle,
       companyName: result.companyName,
       requestId: result.requestId,
-      entries: await shortlistRepository.listForRole(input.roleId),
+      entries: await shortlistRepository.listForRole(input.roleId, input.collegeId),
     };
   },
 
-  async getShortlist(roleId: string) {
-    await this.getRoleContext(roleId);
-    return shortlistRepository.listForRole(roleId);
+  async getShortlist(roleId: string, collegeId: string) {
+    await this.getRoleContext(roleId, collegeId);
+    return shortlistRepository.listForRole(roleId, collegeId);
   },
 
-  async listDispatches() {
-    return shortlistRepository.listDispatches();
+  async listDispatches(collegeId: string) {
+    return shortlistRepository.listDispatches(collegeId);
   },
 };

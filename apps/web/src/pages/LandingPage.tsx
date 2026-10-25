@@ -10,20 +10,20 @@ const portals = [
   {
     icon: GraduationCap,
     title: 'Students',
-    description: 'Keep your academic record, skills and experience in one profile, and receive shortlist notifications from the placement cell.',
+    description: 'Keep your academic record, skills and experience in one profile, and receive shortlist notifications from your college placement cell.',
     to: '/register/student',
     cta: 'Create student account',
   },
   {
     icon: Building2,
-    title: 'Employers',
-    description: 'Register your company, submit hiring requests with structured eligibility criteria, and track their review status.',
+    title: 'Recruiters',
+    description: 'Register against a college, submit hiring requests with structured eligibility criteria, and track their review status.',
     to: '/register/employer',
-    cta: 'Register a company',
+    cta: 'Register as a recruiter',
   },
   {
     icon: ShieldCheck,
-    title: 'Placement cell',
+    title: 'College administrators',
     description: 'Review hiring requests, evaluate real student data against criteria, finalise shortlists and notify selected students.',
     to: '/login',
     cta: 'Administrator sign in',
@@ -31,8 +31,8 @@ const portals = [
 ];
 
 const steps = [
-  { title: 'Employer submits a request', body: 'One request can carry several roles, each with its own structured eligibility criteria.' },
-  { title: 'Administrator reviews it', body: 'Requests are approved, rejected, or returned with a note explaining what needs to change.' },
+  { title: 'Recruiter submits a request', body: 'One request can carry several roles, each with its own structured eligibility criteria.' },
+  { title: 'College administrator reviews it', body: 'Requests are approved, rejected, or returned with a note explaining what needs to change.' },
   { title: 'Eligibility is computed', body: 'Saved academic records, backlogs, experience and skills are evaluated against the role criteria.' },
   { title: 'Shortlist is dispatched', body: 'The placement cell confirms the final list. Each selected student receives an in-app notification.' },
 ];
@@ -49,13 +49,14 @@ export const LandingPage = () => {
       <section className="border-b border-border bg-white">
         <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-14 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:py-20">
           <div className="max-w-xl space-y-6">
-            <Badge variant="info">College placement cell</Badge>
+            <Badge variant="info">Multi-college placement management</Badge>
             <h1 className="text-3xl font-semibold leading-tight sm:text-4xl">
               Campus placement operations, kept in one place.
             </h1>
             <p className="text-base leading-relaxed text-muted-foreground">
-              CampusConnect connects students, employers and the placement cell. Employers submit structured hiring requests,
-              the college verifies who is actually eligible, and selected students are notified inside the portal.
+              CampusConnect connects students, recruiters and college placement cells. Recruiters submit structured hiring
+              requests, the college verifies who is actually eligible, and selected students are notified inside the portal.
+              Each college is fully separate — its own students, recruiters, skills and requests.
             </p>
             <div className="flex flex-wrap items-center gap-3">
               <Link to="/register/student" className={cn(buttonVariants({ size: 'lg' }))}>
@@ -123,9 +124,11 @@ export const LandingPage = () => {
           <div className="flex items-start gap-3">
             <UserRound className="mt-0.5 h-4 w-4 text-navy-500" />
             <div>
-              <p className="text-sm font-medium text-navy-900">No administrator account yet?</p>
+              <p className="text-sm font-medium text-navy-900">No college set up yet?</p>
               <p className="text-sm text-muted-foreground">
-                The first administrator is created with a one-time command, not a public form: <code className="rounded bg-navy-50 px-1.5 py-0.5 text-xs">npm run admin:bootstrap</code>
+                Colleges are created by an operator, not through a public form:{' '}
+                <code className="rounded bg-navy-50 px-1.5 py-0.5 text-xs">npm run admin:bootstrap</code> creates one college
+                and its first administrator. Run it again for each additional college.
               </p>
             </div>
           </div>

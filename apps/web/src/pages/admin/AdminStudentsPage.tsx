@@ -65,7 +65,7 @@ export const AdminStudentsPage = () => {
               description={
                 query
                   ? 'Try a different name or email address.'
-                  : 'Student records appear here as soon as students create accounts through the public registration page.'
+                  : 'Students appear here as soon as they register for your college. Share the student registration page with them — only accounts that selected this college are visible to you.'
               }
             />
           </CardContent>

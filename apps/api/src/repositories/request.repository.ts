@@ -87,7 +87,7 @@ const mapRole = (row: RoleRow): JobRole => ({
   updatedAt: row.role.updatedAt,
 });
 
-const ROLE_QUERY = `MATCH (h:HiringRequest {id: $requestId})-[:CONTAINS_ROLE]->(j:JobRole)
+const ROLE_QUERY = `MATCH (h:HiringRequest {id: $requestId, collegeId: $collegeId})-[:CONTAINS_ROLE]->(j:JobRole {collegeId: $collegeId})
 CALL {
   WITH j
   OPTIONAL MATCH (:Student)-[r:SHORTLISTED_FOR]->(j)
@@ -98,11 +98,11 @@ RETURN j { .id, .title, .description, .location, .employmentType, .registrationU
        shortlistedCount
 ORDER BY j.createdAt ASC`;
 
-const REQUEST_QUERY = `MATCH (c:Company)-[:SUBMITTED]->(h:HiringRequest)
+const REQUEST_QUERY = `MATCH (c:Company {collegeId: $collegeId})-[:SUBMITTED]->(h:HiringRequest {collegeId: $collegeId})
 WHERE ($id IS NULL OR h.id = $id)
   AND ($status IS NULL OR h.status = $status)
   AND ($q = '' OR toLower(h.title) CONTAINS $q OR toLower(c.name) CONTAINS $q)
-  AND ($employerId IS NULL OR EXISTS { MATCH (c)-[:HAS_ACCOUNT]->(:EmployerAccount {id: $employerId}) })
+  AND ($employerId IS NULL OR EXISTS { MATCH (c)-[:HAS_ACCOUNT]->(:EmployerAccount {id: $employerId, collegeId: $collegeId}) })
 OPTIONAL MATCH (h)-[:HAS_REVIEW_EVENT]->(ev:ReviewEvent)
 WITH c, h, ev
 ORDER BY ev.at DESC
@@ -131,19 +131,30 @@ const toRequest = (row: RequestRow, roles: JobRole[]): RequestWithRoles => ({
   reviewEvents: cleanEvents(row.reviewEvents),
 });
 
-async function writeRoles(tx: ManagedTransaction, requestId: string, roles: RoleInput[], status: RequestStatus, now: string): Promise<void> {
+async function writeRoles(
+  tx: ManagedTransaction,
+  requestId: string,
+  collegeId: string,
+  roles: RoleInput[],
+  status: RequestStatus,
+  now: string,
+): Promise<void> {
   for (const role of roles) {
     const roleId = newId('rol');
     await tx.run(
-      `MATCH (h:HiringRequest {id: $requestId})
+      `MATCH (h:HiringRequest {id: $requestId, collegeId: $collegeId})
+       MATCH (college:College {id: $collegeId})
        CREATE (j:JobRole {
          id: $roleId, title: $title, description: $description, location: $location,
          employmentType: $employmentType, registrationUrl: $registrationUrl, criteriaJson: $criteriaJson,
-         status: $status, shortlistStatus: 'NONE', dispatchedAt: null, createdAt: $now, updatedAt: $now
+         status: $status, shortlistStatus: 'NONE', dispatchedAt: null, collegeId: $collegeId,
+         createdAt: $now, updatedAt: $now
        })
-       CREATE (h)-[:CONTAINS_ROLE]->(j)`,
+       CREATE (h)-[:CONTAINS_ROLE]->(j)
+       CREATE (j)-[:BELONGS_TO]->(college)`,
       {
         requestId,
+        collegeId,
         roleId,
         title: role.title,
         description: role.description,
@@ -156,33 +167,26 @@ async function writeRoles(tx: ManagedTransaction, requestId: string, roles: Role
       },
     );
 
-    const links = [
-      ...role.criteria.requiredSkillIds.map((skillId) => ({ roleId, skillId, type: 'REQUIRES_SKILL' })),
-      ...role.criteria.optionalSkillIds.map((skillId) => ({ roleId, skillId, type: 'PREFERS_SKILL' })),
-    ];
+    const required = role.criteria.requiredSkillIds.map((skillId) => ({ roleId, skillId }));
+    const optional = role.criteria.optionalSkillIds.map((skillId) => ({ roleId, skillId }));
 
-    if (links.length > 0) {
-      const required = links.filter((link) => link.type === 'REQUIRES_SKILL');
-      const optional = links.filter((link) => link.type === 'PREFERS_SKILL');
-
-      if (required.length > 0) {
-        await tx.run(
-          `UNWIND $links AS link
-           MATCH (j:JobRole {id: link.roleId})
-           MATCH (k:Skill {id: link.skillId})
-           MERGE (j)-[:REQUIRES_SKILL]->(k)`,
-          { links: required },
-        );
-      }
-      if (optional.length > 0) {
-        await tx.run(
-          `UNWIND $links AS link
-           MATCH (j:JobRole {id: link.roleId})
-           MATCH (k:Skill {id: link.skillId})
-           MERGE (j)-[:PREFERS_SKILL]->(k)`,
-          { links: optional },
-        );
-      }
+    if (required.length > 0) {
+      await tx.run(
+        `UNWIND $links AS link
+         MATCH (j:JobRole {id: link.roleId, collegeId: $collegeId})
+         MATCH (k:Skill {id: link.skillId, collegeId: $collegeId})
+         MERGE (j)-[:REQUIRES_SKILL]->(k)`,
+        { links: required, collegeId },
+      );
+    }
+    if (optional.length > 0) {
+      await tx.run(
+        `UNWIND $links AS link
+         MATCH (j:JobRole {id: link.roleId, collegeId: $collegeId})
+         MATCH (k:Skill {id: link.skillId, collegeId: $collegeId})
+         MERGE (j)-[:PREFERS_SKILL]->(k)`,
+        { links: optional, collegeId },
+      );
     }
   }
 }
@@ -190,6 +194,7 @@ async function writeRoles(tx: ManagedTransaction, requestId: string, roles: Role
 export const requestRepository = {
   async create(input: {
     employerId: string;
+    collegeId: string;
     title: string;
     assessmentInstructions: string | null;
     roles: RoleInput[];
@@ -201,15 +206,19 @@ export const requestRepository = {
 
     await withTransaction(async (tx) => {
       const result = await tx.run(
-        `MATCH (c:Company)-[:HAS_ACCOUNT]->(:EmployerAccount {id: $employerId})
+        `MATCH (c:Company {collegeId: $collegeId})-[:HAS_ACCOUNT]->(:EmployerAccount {id: $employerId, collegeId: $collegeId})
+         MATCH (college:College {id: $collegeId})
          CREATE (h:HiringRequest {
            id: $requestId, title: $title, assessmentInstructions: $instructions, status: $status,
-           submittedAt: $submittedAt, reviewedAt: null, reviewNote: null, createdAt: $now, updatedAt: $now
+           submittedAt: $submittedAt, reviewedAt: null, reviewNote: null, collegeId: $collegeId,
+           createdAt: $now, updatedAt: $now
          })
          CREATE (c)-[:SUBMITTED]->(h)
+         CREATE (h)-[:BELONGS_TO]->(college)
          RETURN h.id AS id`,
         {
           employerId: input.employerId,
+          collegeId: input.collegeId,
           requestId,
           title: input.title,
           instructions: input.assessmentInstructions,
@@ -221,7 +230,7 @@ export const requestRepository = {
       if (result.records.length === 0) {
         throw new Error('Employer company not found');
       }
-      await writeRoles(tx, requestId, input.roles, input.status, now);
+      await writeRoles(tx, requestId, input.collegeId, input.roles, input.status, now);
     });
 
     return requestId;
@@ -229,6 +238,7 @@ export const requestRepository = {
 
   async update(input: {
     requestId: string;
+    collegeId: string;
     title: string;
     assessmentInstructions: string | null;
     roles: RoleInput[];
@@ -236,29 +246,32 @@ export const requestRepository = {
   }): Promise<void> {
     const now = nowIso();
     await withTransaction(async (tx) => {
-      await tx.run('MATCH (h:HiringRequest {id: $requestId})-[:CONTAINS_ROLE]->(j:JobRole) DETACH DELETE j', {
-        requestId: input.requestId,
-      });
       await tx.run(
-        `MATCH (h:HiringRequest {id: $requestId})
+        'MATCH (h:HiringRequest {id: $requestId, collegeId: $collegeId})-[:CONTAINS_ROLE]->(j:JobRole) DETACH DELETE j',
+        { requestId: input.requestId, collegeId: input.collegeId },
+      );
+      await tx.run(
+        `MATCH (h:HiringRequest {id: $requestId, collegeId: $collegeId})
          SET h.title = $title, h.assessmentInstructions = $instructions, h.updatedAt = $now, h.status = $status,
              h.submittedAt = CASE WHEN $status = 'SUBMITTED' THEN $now ELSE h.submittedAt END,
              h.reviewNote = CASE WHEN $status = 'SUBMITTED' THEN null ELSE h.reviewNote END,
              h.reviewedAt = CASE WHEN $status = 'SUBMITTED' THEN null ELSE h.reviewedAt END`,
         {
           requestId: input.requestId,
+          collegeId: input.collegeId,
           title: input.title,
           instructions: input.assessmentInstructions,
           now,
           status: input.status,
         },
       );
-      await writeRoles(tx, input.requestId, input.roles, input.status, now);
+      await writeRoles(tx, input.requestId, input.collegeId, input.roles, input.status, now);
     });
   },
 
   async review(input: {
     requestId: string;
+    collegeId: string;
     adminId: string;
     status: RequestStatus;
     previousStatus: RequestStatus;
@@ -268,7 +281,7 @@ export const requestRepository = {
     const now = nowIso();
     await withTransaction(async (tx) => {
       await tx.run(
-        `MATCH (h:HiringRequest {id: $requestId})
+        `MATCH (h:HiringRequest {id: $requestId, collegeId: $collegeId})
          SET h.status = $status, h.reviewNote = $note, h.reviewedAt = $now, h.reviewedByAdminId = $adminId, h.updatedAt = $now
          CREATE (ev:ReviewEvent {
            id: $eventId, action: $action, fromStatus: $previousStatus, toStatus: $status,
@@ -277,6 +290,7 @@ export const requestRepository = {
          CREATE (h)-[:HAS_REVIEW_EVENT]->(ev)`,
         {
           requestId: input.requestId,
+          collegeId: input.collegeId,
           status: input.status,
           note: input.note,
           now,
@@ -286,19 +300,19 @@ export const requestRepository = {
           previousStatus: input.previousStatus,
         },
       );
-      await tx.run('MATCH (h:HiringRequest {id: $requestId})-[:CONTAINS_ROLE]->(j:JobRole) SET j.status = $status, j.updatedAt = $now', {
-        requestId: input.requestId,
-        status: input.status,
-        now,
-      });
+      await tx.run(
+        `MATCH (h:HiringRequest {id: $requestId, collegeId: $collegeId})-[:CONTAINS_ROLE]->(j:JobRole)
+         SET j.status = $status, j.updatedAt = $now`,
+        { requestId: input.requestId, collegeId: input.collegeId, status: input.status, now },
+      );
     });
   },
 
-  async submit(input: { requestId: string; employerId: string; previousStatus: RequestStatus }): Promise<void> {
+  async submit(input: { requestId: string; collegeId: string; employerId: string; previousStatus: RequestStatus }): Promise<void> {
     const now = nowIso();
     await withTransaction(async (tx) => {
       await tx.run(
-        `MATCH (h:HiringRequest {id: $requestId})
+        `MATCH (h:HiringRequest {id: $requestId, collegeId: $collegeId})
          SET h.status = 'SUBMITTED', h.submittedAt = $now, h.updatedAt = $now, h.reviewNote = null, h.reviewedAt = null
          CREATE (ev:ReviewEvent {
            id: $eventId, action: 'REQUEST_SUBMITTED', fromStatus: $previousStatus, toStatus: 'SUBMITTED',
@@ -307,60 +321,68 @@ export const requestRepository = {
          CREATE (h)-[:HAS_REVIEW_EVENT]->(ev)`,
         {
           requestId: input.requestId,
+          collegeId: input.collegeId,
           employerId: input.employerId,
           previousStatus: input.previousStatus,
           eventId: newId('rev'),
           now,
         },
       );
-      await tx.run('MATCH (h:HiringRequest {id: $requestId})-[:CONTAINS_ROLE]->(j:JobRole) SET j.status = \'SUBMITTED\', j.updatedAt = $now', {
-        requestId: input.requestId,
-        now,
-      });
+      await tx.run(
+        `MATCH (h:HiringRequest {id: $requestId, collegeId: $collegeId})-[:CONTAINS_ROLE]->(j:JobRole)
+         SET j.status = 'SUBMITTED', j.updatedAt = $now`,
+        { requestId: input.requestId, collegeId: input.collegeId, now },
+      );
     });
   },
 
-  async getById(requestId: string): Promise<RequestWithRoles | null> {
-    const rows = await readQuery<RequestRow>(REQUEST_QUERY, { id: requestId, employerId: null, status: null, q: '' });
+  async getById(requestId: string, collegeId: string): Promise<RequestWithRoles | null> {
+    const rows = await readQuery<RequestRow>(REQUEST_QUERY, { id: requestId, employerId: null, status: null, q: '', collegeId });
     const row = rows[0];
     if (!row) return null;
-    const roles = await readQuery<RoleRow>(ROLE_QUERY, { requestId });
+    const roles = await readQuery<RoleRow>(ROLE_QUERY, { requestId, collegeId });
     return toRequest(row, roles.map(mapRole));
   },
 
-  async list(params: { employerId: string | null; status: RequestStatus | null; q: string }): Promise<RequestWithRoles[]> {
+  async list(params: {
+    collegeId: string;
+    employerId: string | null;
+    status: RequestStatus | null;
+    q: string;
+  }): Promise<RequestWithRoles[]> {
     const rows = await readQuery<RequestRow>(REQUEST_QUERY, {
       id: null,
       employerId: params.employerId,
       status: params.status,
       q: params.q,
+      collegeId: params.collegeId,
     });
     const requests: RequestWithRoles[] = [];
     for (const row of rows) {
-      const roles = await readQuery<RoleRow>(ROLE_QUERY, { requestId: row.request.id });
+      const roles = await readQuery<RoleRow>(ROLE_QUERY, { requestId: row.request.id, collegeId: params.collegeId });
       requests.push(toRequest(row, roles.map(mapRole)));
     }
     return requests;
   },
 
-  async belongsToEmployer(requestId: string, employerId: string): Promise<boolean> {
+  async belongsToEmployer(requestId: string, employerId: string, collegeId: string): Promise<boolean> {
     const row = await readOne<{ id: string }>(
-      `MATCH (c:Company)-[:HAS_ACCOUNT]->(:EmployerAccount {id: $employerId})
-       MATCH (c)-[:SUBMITTED]->(h:HiringRequest {id: $requestId})
+      `MATCH (c:Company {collegeId: $collegeId})-[:HAS_ACCOUNT]->(:EmployerAccount {id: $employerId, collegeId: $collegeId})
+       MATCH (c)-[:SUBMITTED]->(h:HiringRequest {id: $requestId, collegeId: $collegeId})
        RETURN h.id AS id`,
-      { requestId, employerId },
+      { requestId, employerId, collegeId },
     );
     return row !== null;
   },
 
-  async getRoleContext(roleId: string): Promise<RoleContext | null> {
+  async getRoleContext(roleId: string, collegeId: string): Promise<RoleContext | null> {
     const row = await readOne<{
       role: RoleNode;
       request: RequestNode;
       company: { id: string; name: string };
       shortlistedCount: number;
     }>(
-      `MATCH (c:Company)-[:SUBMITTED]->(h:HiringRequest)-[:CONTAINS_ROLE]->(j:JobRole {id: $roleId})
+      `MATCH (c:Company {collegeId: $collegeId})-[:SUBMITTED]->(h:HiringRequest {collegeId: $collegeId})-[:CONTAINS_ROLE]->(j:JobRole {id: $roleId, collegeId: $collegeId})
        CALL {
          WITH j
          OPTIONAL MATCH (:Student)-[r:SHORTLISTED_FOR]->(j)
@@ -372,7 +394,7 @@ export const requestRepository = {
                   .createdAt, .updatedAt } AS request,
               c { .id, .name } AS company,
               shortlistedCount`,
-      { roleId },
+      { roleId, collegeId },
     );
     if (!row) return null;
     return {
@@ -382,30 +404,37 @@ export const requestRepository = {
     };
   },
 
-  async countByStatus(status: RequestStatus): Promise<number> {
-    const row = await readOne<{ total: number }>('MATCH (h:HiringRequest {status: $status}) RETURN count(h) AS total', { status });
-    return row?.total ?? 0;
-  },
-
-  async deleteDraft(requestId: string): Promise<void> {
-    await withTransaction(async (tx) => {
-      await tx.run('MATCH (h:HiringRequest {id: $requestId})-[:CONTAINS_ROLE]->(j:JobRole) DETACH DELETE j', { requestId });
-      await tx.run('MATCH (h:HiringRequest {id: $requestId}) DETACH DELETE h', { requestId });
-    });
-  },
-
-  async countRolesForRequest(requestId: string): Promise<number> {
+  async countByStatus(collegeId: string, status: RequestStatus): Promise<number> {
     const row = await readOne<{ total: number }>(
-      'MATCH (:HiringRequest {id: $requestId})-[:CONTAINS_ROLE]->(j:JobRole) RETURN count(j) AS total',
-      { requestId },
+      'MATCH (h:HiringRequest {collegeId: $collegeId, status: $status}) RETURN count(h) AS total',
+      { collegeId, status },
     );
     return row?.total ?? 0;
   },
 
-  async listRoleIdsForRequest(requestId: string): Promise<string[]> {
-    const rows = await readQuery<{ id: string }>('MATCH (:HiringRequest {id: $requestId})-[:CONTAINS_ROLE]->(j:JobRole) RETURN j.id AS id', {
-      requestId,
+  async deleteDraft(requestId: string, collegeId: string): Promise<void> {
+    await withTransaction(async (tx) => {
+      await tx.run('MATCH (h:HiringRequest {id: $requestId, collegeId: $collegeId})-[:CONTAINS_ROLE]->(j:JobRole) DETACH DELETE j', {
+        requestId,
+        collegeId,
+      });
+      await tx.run('MATCH (h:HiringRequest {id: $requestId, collegeId: $collegeId}) DETACH DELETE h', { requestId, collegeId });
     });
+  },
+
+  async countRolesForRequest(requestId: string, collegeId: string): Promise<number> {
+    const row = await readOne<{ total: number }>(
+      'MATCH (:HiringRequest {id: $requestId, collegeId: $collegeId})-[:CONTAINS_ROLE]->(j:JobRole) RETURN count(j) AS total',
+      { requestId, collegeId },
+    );
+    return row?.total ?? 0;
+  },
+
+  async listRoleIdsForRequest(requestId: string, collegeId: string): Promise<string[]> {
+    const rows = await readQuery<{ id: string }>(
+      'MATCH (:HiringRequest {id: $requestId, collegeId: $collegeId})-[:CONTAINS_ROLE]->(j:JobRole) RETURN j.id AS id',
+      { requestId, collegeId },
+    );
     return rows.map((row) => row.id);
   },
 };

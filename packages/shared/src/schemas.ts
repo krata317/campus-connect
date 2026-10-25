@@ -82,11 +82,45 @@ export const loginSchema = z.object({
   role: z.enum(['STUDENT', 'ADMIN', 'EMPLOYER']).optional(),
 });
 
+/**
+ * Turns a human-entered college name or identifier into a stable tenant slug.
+ * Used by the bootstrap command, the API and the registration form so all three
+ * agree on what a slug looks like.
+ */
+export const normalizeCollegeSlug = (value: string): string =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+export const collegeSlugSchema = z
+  .string({ required_error: 'College identifier is required' })
+  .trim()
+  .min(1, 'College identifier is required')
+  .max(80, 'College identifier must be at most 80 characters')
+  .transform(normalizeCollegeSlug)
+  .refine((value) => value.length >= 2, 'College identifier must be at least 2 characters')
+  .refine((value) => value.length <= 50, 'College identifier must be at most 50 characters')
+  .refine(
+    (value) => /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])$/.test(value),
+    'Use lowercase letters, numbers and hyphens, starting and ending with a letter or number',
+  );
+
+export const collegeCreateSchema = z.object({
+  name: requiredText('College name', 160),
+  slug: collegeSlugSchema,
+  website: optionalHttpUrlSchema,
+  contactEmail: z.preprocess(blankToNull, emailSchema.nullable()),
+  contactPhone: optionalText('Contact phone', 30),
+});
+
 export const studentRegisterSchema = z.object({
   fullName: nameSchema,
   email: emailSchema,
   password: passwordSchema,
   dateOfBirth: optionalText('Date of birth', 10),
+  collegeSlug: collegeSlugSchema,
 });
 
 export const employerRegisterSchema = z.object({
@@ -98,6 +132,7 @@ export const employerRegisterSchema = z.object({
   contactPhone: requiredText('Contact phone', 30),
   companyEmail: emailSchema,
   description: optionalText('Company description', 2000),
+  collegeSlug: collegeSlugSchema,
 });
 
 export const profileUpdateSchema = z.object({

@@ -1,5 +1,28 @@
 export type Role = 'STUDENT' | 'ADMIN' | 'EMPLOYER';
 
+/**
+ * Every account, skill, hiring request and notification belongs to exactly one
+ * College. The college is the tenant boundary for the whole application.
+ */
+export interface College {
+  id: string;
+  name: string;
+  slug: string;
+  website: string | null;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** The minimal college identity attached to an authenticated session. */
+export interface CollegeSummary {
+  id: string;
+  name: string;
+  slug: string;
+}
+
 export type EducationLevel = 'CLASS_10' | 'CLASS_12' | 'UNDERGRAD' | 'POSTGRAD';
 
 export type ScoreType = 'PERCENTAGE' | 'CGPA';
@@ -205,6 +228,8 @@ export interface AuthUser {
   role: Role;
   email: string;
   displayName: string;
+  /** The college this account belongs to. Resolved from the database on every request. */
+  college: CollegeSummary | null;
   employerApprovalStatus?: EmployerApprovalStatus;
 }
 

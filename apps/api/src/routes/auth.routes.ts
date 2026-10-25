@@ -12,6 +12,9 @@ const establishSession = async (req: Request, user: AuthUser): Promise<void> => 
   await new Promise<void>((resolve, reject) => {
     req.session.regenerate((error) => (error ? reject(error) : resolve()));
   });
+  // Only the identity and role are stored. The college is re-resolved from the
+  // database on every request by requireAuth, so a stale or tampered session
+  // cannot point at another tenant.
   req.session.userId = user.id;
   req.session.role = user.role;
   await new Promise<void>((resolve, reject) => {
@@ -35,6 +38,7 @@ authRouter.post(
       email: body.email,
       password: body.password,
       dateOfBirth: body.dateOfBirth ?? null,
+      collegeSlug: body.collegeSlug,
     });
     await establishSession(req, user);
     res.status(201).json({ user });
@@ -55,6 +59,7 @@ authRouter.post(
       contactPhone: body.contactPhone,
       companyEmail: body.companyEmail,
       description: body.description ?? null,
+      collegeSlug: body.collegeSlug,
     });
     await establishSession(req, user);
     res.status(201).json({ user });

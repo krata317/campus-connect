@@ -41,13 +41,13 @@ export const requireRole =
 
 export const requireApprovedEmployer: RequestHandler = (req: Request, _res: Response, next: NextFunction) => {
   if (!req.authUser || req.authUser.role !== 'EMPLOYER') {
-    next(forbidden('Only employer accounts can access this area'));
+    next(forbidden('Only recruiter accounts can access this area'));
     return;
   }
   if (req.authUser.employerApprovalStatus !== 'APPROVED') {
     next(
       forbidden(
-        'Your employer account is waiting for college approval. You can review your company profile, but hiring requests stay locked until an administrator approves the account.',
+        'Your recruiter account is waiting for college approval. You can review your company profile, but hiring requests stay locked until an administrator approves the account.',
       ),
     );
     return;
@@ -58,4 +58,17 @@ export const requireApprovedEmployer: RequestHandler = (req: Request, _res: Resp
 export const currentUser = (req: Request) => {
   if (!req.authUser) throw unauthorized();
   return req.authUser;
+};
+
+/**
+ * The tenant id used by every repository call. It comes from the session user
+ * (reloaded from the graph on each request), never from a header, query
+ * parameter or request body.
+ */
+export const currentCollegeId = (req: Request): string => {
+  const user = currentUser(req);
+  if (!user.college) {
+    throw forbidden('This account is not linked to a college. Ask your placement cell to check the setup.');
+  }
+  return user.college.id;
 };

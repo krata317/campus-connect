@@ -6,6 +6,7 @@ import type { AuthUser } from '@campusconnect/shared';
 import { Alert, Spinner } from '@/components/ui/feedback';
 import { Button } from '@/components/ui/button';
 import { Field, Input, Textarea } from '@/components/ui/form';
+import { CollegeSelect } from '@/components/shared/CollegeSelect';
 import { api, errorMessage } from '@/lib/api';
 import { applyFieldErrors, resolver } from '@/lib/form';
 import { dashboardPathFor, meQueryKey } from '@/hooks/useAuth';
@@ -20,6 +21,7 @@ type EmployerRegisterForm = {
   password: string;
   confirmPassword: string;
   description: string;
+  collegeSlug: string;
 };
 
 export const EmployerRegisterPage = () => {
@@ -43,10 +45,11 @@ export const EmployerRegisterPage = () => {
       password: '',
       confirmPassword: '',
       description: '',
+      collegeSlug: '',
     },
   });
 
-const mutation = useMutation({
+  const mutation = useMutation({
     mutationFn: (values: EmployerRegisterForm) => {
       const { confirmPassword, ...formValues } = values;
       const parsed = employerRegisterSchema.parse(formValues);
@@ -59,6 +62,7 @@ const mutation = useMutation({
         contactPhone: parsed.contactPhone,
         companyEmail: parsed.companyEmail,
         description: parsed.description ?? null,
+        collegeSlug: parsed.collegeSlug,
       });
     },
     onSuccess: (data) => {
@@ -79,14 +83,25 @@ const mutation = useMutation({
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-12 sm:px-0">
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold">Register your company</h1>
+        <h1 className="text-2xl font-semibold">Register as a recruiter</h1>
         <p className="text-sm text-muted-foreground">
-          A placement administrator reviews every company before hiring requests can be submitted. You can sign in and review
-          your profile while the account is pending.
+          Choose the college you are hiring from, then add your company details. A placement administrator reviews every
+          recruiter before hiring requests can be submitted; you can sign in and review your profile while the account is
+          pending.
         </p>
       </div>
 
       <form className="space-y-5 rounded-lg border border-border bg-white p-5" onSubmit={handleSubmit(onSubmit)} noValidate>
+        <Field
+          label="Hiring from college"
+          htmlFor="collegeSlug"
+          error={errors.collegeSlug?.message}
+          hint="Your account only reaches this college's students and hiring requests."
+          required
+        >
+          <CollegeSelect id="collegeSlug" {...register('collegeSlug')} />
+        </Field>
+
         <div>
           <h2 className="text-sm font-semibold text-navy-900">Company</h2>
           <p className="text-xs text-muted-foreground">Details shown to the placement cell.</p>
@@ -145,7 +160,7 @@ const mutation = useMutation({
 
         <Button type="submit" className="w-full" disabled={mutation.isPending}>
           {mutation.isPending ? <Spinner /> : null}
-          Register company
+          Register as a recruiter
         </Button>
       </form>
 

@@ -20,6 +20,7 @@ async function main(): Promise<void> {
   console.log(`Created or verified ${result.indexes.length} indexes:`);
   for (const name of result.indexes) console.log(`  - ${name}`);
   console.log('\nSchema initialisation complete. No business data was created.');
+  console.log('Next: npm run admin:bootstrap to create the first college and its administrator.');
 }
 
 main()

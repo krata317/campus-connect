@@ -1,8 +1,7 @@
 import { beforeAll, afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { connectTestDatabase, disconnectTestDatabase, hasTestDb, resetDatabase, testDbSkipReason } from '../helpers/db';
 import { createTestClient, uniqueEmail, STUDENT_PASSWORD, EMPLOYER_PASSWORD, ADMIN_PASSWORD, type TestClient } from '../helpers/client';
-import { accountRepository } from '../../src/repositories/account.repository';
-import { hashPassword } from '../../src/lib/password';
+import { collegeService } from '../../src/services/college.service';
 
 const describeDb = hasTestDb ? describe : describe.skip;
 
@@ -37,10 +36,23 @@ describeDb('employer to student placement pipeline', () => {
     await resetDatabase();
   });
 
+  // The slug of the college created for the current test. Registration helpers
+  // need it because every account must belong to a tenant.
+  let collegeSlug = '';
+
   const signInAdmin = async (): Promise<TestClient> => {
     const email = uniqueEmail('admin');
-    const passwordHash = await hashPassword(ADMIN_PASSWORD);
-    await accountRepository.createAdmin({ email, passwordHash, name: 'Placement Admin' });
+    collegeSlug = `college-${Math.random().toString(36).slice(2, 9)}`;
+    await collegeService.onboard({
+      name: 'Northfield Institute of Technology',
+      slug: collegeSlug,
+      website: null,
+      contactEmail: null,
+      contactPhone: null,
+      adminEmail: email,
+      adminName: 'Placement Admin',
+      adminPassword: ADMIN_PASSWORD,
+    });
 
     const client = createTestClient();
     const login = await client.post('/api/auth/login', { email, password: ADMIN_PASSWORD, role: 'ADMIN' });
@@ -65,6 +77,7 @@ describeDb('employer to student placement pipeline', () => {
       fullName,
       email: uniqueEmail('student'),
       password: STUDENT_PASSWORD,
+      collegeSlug,
     });
     expect(response.status).toBe(201);
     return { client, id: response.body.user.id as string };
@@ -116,6 +129,7 @@ describeDb('employer to student placement pipeline', () => {
       contactPhone: '9876543210',
       companyEmail: uniqueEmail('hr'),
       description: 'Product engineering company',
+      collegeSlug,
     });
     expect(response.status).toBe(201);
     return { client, id: response.body.user.id as string };

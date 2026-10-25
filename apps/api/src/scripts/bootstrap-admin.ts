@@ -1,18 +1,23 @@
 import readline from 'node:readline';
 import { randomUUID } from 'node:crypto';
-import { emailSchema, nameSchema, passwordSchema } from '@campusconnect/shared';
+import { collegeCreateSchema, collegeSlugSchema, emailSchema, nameSchema, passwordSchema } from '@campusconnect/shared';
 import { accountRepository } from '../repositories/account.repository';
-import { hashPassword } from '../lib/password';
+import { collegeRepository } from '../repositories/college.repository';
+import { collegeService } from '../services/college.service';
 import { closeDriver, verifyConnectivity } from '../db/neo4j';
 import { env } from '../config/env';
 
+/**
+ * Creates a college and its first administrator.
+ *
+ * This is the only way to add a tenant. It is a local operator command, never
+ * an HTTP endpoint, and it can be run once per college. Each run is
+ * transactional: either both the College and the Admin exist afterwards, or
+ * neither does.
+ */
+
 const pipedLines: string[] = [];
 
-/**
- * When stdin is not a terminal (CI, provisioning scripts, `... < answers.txt`)
- * the answers are read from the piped stream instead of an interactive prompt,
- * so the command never hangs waiting for a TTY that will not arrive.
- */
 async function collectPipedInput(): Promise<void> {
   if (process.stdin.isTTY) return;
   const chunks: Buffer[] = [];
@@ -69,9 +74,16 @@ function askHidden(question: string): Promise<string> {
   });
 }
 
+const fail = (message: string): number => {
+  console.error(`\n${message}`);
+  return 1;
+};
+
 async function main(): Promise<number> {
-  console.log('CampusConnect — initial administrator setup');
-  console.log('-------------------------------------------');
+  console.log('CampusConnect — college onboarding');
+  console.log('----------------------------------');
+  console.log('Creates one college and its first administrator account.');
+  console.log('Run it again with different details to add another college.\n');
 
   await collectPipedInput();
 
@@ -79,30 +91,43 @@ async function main(): Promise<number> {
     await verifyConnectivity();
   } catch (error) {
     console.error(`\nCannot reach Neo4j at ${env.NEO4J_URI}.`);
-    console.error('Start the CampusConnect database in Neo4j Desktop and check the NEO4J_* values in .env.');
+    console.error('Start the database (Neo4j Desktop locally, AuraDB in production) and check the NEO4J_* values in .env.');
     console.error(`Details: ${error instanceof Error ? error.message : String(error)}`);
     return 1;
   }
 
-  const existing = await accountRepository.countAdmins();
-  if (existing > 0) {
-    console.error('\nAn administrator account already exists. This bootstrap command only creates the first one.');
-    console.error('Sign in with the existing administrator account instead.');
-    return 1;
+  const existingColleges = await collegeRepository.count();
+  if (existingColleges > 0) {
+    console.log(`The database already holds ${existingColleges} college(s). This run will add a new one.\n`);
+  }
+
+  const collegeNameInput = (process.env.COLLEGE_NAME ?? (await ask('College name: '))).trim();
+  const collegeNameResult = collegeCreateSchema.shape.name.safeParse(collegeNameInput);
+  if (!collegeNameResult.success) {
+    return fail(`Invalid college name: ${collegeNameResult.error.issues[0]?.message ?? 'unknown error'}`);
+  }
+
+  const slugInput = (process.env.COLLEGE_SLUG ?? (await ask('College identifier (slug), e.g. northfield-institute: '))).trim();
+  const slugResult = collegeSlugSchema.safeParse(slugInput);
+  if (!slugResult.success) {
+    return fail(`Invalid college identifier: ${slugResult.error.issues[0]?.message ?? 'unknown error'}`);
+  }
+  const slug = slugResult.data;
+
+  if (await collegeRepository.findBySlug(slug)) {
+    return fail(`A college with the identifier "${slug}" already exists. Nothing was created.`);
   }
 
   const emailInput = (process.env.ADMIN_EMAIL ?? (await ask('Administrator email: '))).trim().toLowerCase();
   const emailResult = emailSchema.safeParse(emailInput);
   if (!emailResult.success) {
-    console.error(`\nInvalid email: ${emailResult.error.issues[0]?.message ?? 'unknown error'}`);
-    return 1;
+    return fail(`Invalid email: ${emailResult.error.issues[0]?.message ?? 'unknown error'}`);
   }
 
   const nameInput = (process.env.ADMIN_NAME ?? (await ask('Administrator display name: '))).trim();
   const nameResult = nameSchema.safeParse(nameInput || 'Placement Administrator');
   if (!nameResult.success) {
-    console.error(`\nInvalid name: ${nameResult.error.issues[0]?.message ?? 'unknown error'}`);
-    return 1;
+    return fail(`Invalid name: ${nameResult.error.issues[0]?.message ?? 'unknown error'}`);
   }
 
   let password = process.env.ADMIN_PASSWORD ?? '';
@@ -110,44 +135,47 @@ async function main(): Promise<number> {
     password = await askHidden('Password (minimum 8 characters): ');
     const confirmation = await askHidden('Confirm password: ');
     if (password !== confirmation) {
-      console.error('\nThe passwords do not match. Nothing was created.');
-      return 1;
+      return fail('The passwords do not match. Nothing was created.');
     }
   }
 
   const passwordResult = passwordSchema.safeParse(password);
   if (!passwordResult.success) {
-    console.error(`\nInvalid password: ${passwordResult.error.issues[0]?.message ?? 'unknown error'}`);
-    return 1;
+    return fail(`Invalid password: ${passwordResult.error.issues[0]?.message ?? 'unknown error'}`);
   }
 
+  const lockKey = `college-bootstrap:${slug}`;
   const token = randomUUID();
-  const claimed = await accountRepository.claimBootstrapLock(token);
+  const claimed = await accountRepository.claimBootstrapLock(lockKey, token);
   if (!claimed) {
-    console.error('\nAnother bootstrap run is in progress or already completed. Nothing was created.');
-    return 1;
+    return fail('Another onboarding run for this college is in progress. Nothing was created.');
   }
 
   try {
-    const recheck = await accountRepository.countAdmins();
-    if (recheck > 0) {
-      console.error('\nAn administrator account already exists. Nothing was created.');
-      return 1;
+    // Re-check inside the lock so two concurrent runs cannot both proceed.
+    if (await collegeRepository.findBySlug(slug)) {
+      return fail(`A college with the identifier "${slug}" already exists. Nothing was created.`);
     }
 
-    const passwordHash = await hashPassword(password);
-    const created = await accountRepository.createAdmin({
-      email: emailResult.data,
-      passwordHash,
-      name: nameResult.data,
+    const created = await collegeService.onboard({
+      name: collegeNameResult.data,
+      slug,
+      website: null,
+      contactEmail: null,
+      contactPhone: null,
+      adminEmail: emailResult.data,
+      adminName: nameResult.data,
+      adminPassword: password,
     });
 
-    console.log('\nAdministrator created successfully.');
-    console.log(`  Email: ${created.email}`);
-    console.log('\nSign in at http://localhost:5173/login with the Admin tab.');
+    console.log('\nCollege created successfully.');
+    console.log(`  College:  ${created.college.name}`);
+    console.log(`  Slug:     ${created.college.slug}`);
+    console.log(`  Admin:    ${created.adminEmail}`);
+    console.log('\nSign in with the College Administrator tab. Students and recruiters choose this college when they register.');
     return 0;
   } finally {
-    await accountRepository.releaseBootstrapLock(token);
+    await accountRepository.releaseBootstrapLock(lockKey, token);
   }
 }
 
@@ -157,7 +185,7 @@ main()
     process.exit(code);
   })
   .catch(async (error: unknown) => {
-    console.error(`\nAdministrator setup failed: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`\nCollege onboarding failed: ${error instanceof Error ? error.message : String(error)}`);
     await closeDriver();
     process.exit(1);
   });

@@ -98,9 +98,9 @@ export const AdminRoleCandidatesPage = () => {
       .filter((candidate): candidate is CandidateEvaluation => Boolean(candidate) && candidate?.eligible === false);
   }, [data, selected]);
 
-  if (candidates.isLoading) return <LoadingState label="Evaluating candidates" />;
+  if (candidates.isLoading) return <LoadingState label="Evaluating students" />;
   if (candidates.isError) return <ErrorState message={errorMessage(candidates.error)} onRetry={() => candidates.refetch()} />;
-  if (!data) return <ErrorState message="Candidate data is unavailable" onRetry={() => candidates.refetch()} />;
+  if (!data) return <ErrorState message="Student data is unavailable" onRetry={() => candidates.refetch()} />;
 
   const dispatched = data.role.shortlistStatus === 'DISPATCHED';
   const requestApproved = data.request.status === 'APPROVED';
@@ -169,7 +169,7 @@ export const AdminRoleCandidatesPage = () => {
       <Card>
         <CardHeader className="flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <CardTitle>Candidates</CardTitle>
+            <CardTitle>Students</CardTitle>
             <p className="text-sm text-muted-foreground">
               Eligibility is computed from saved profiles. Expand a row to see every criterion result.
             </p>

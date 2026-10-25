@@ -60,7 +60,7 @@ export const AdminSkillsPage = () => {
     <div className="space-y-5">
       <PageHeader
         title="Skill catalogue"
-        description="Students and employers can only choose skills from this list. Deactivating a skill hides it from new selections but keeps existing profile and role links intact."
+        description="Students and recruiters can only choose skills from this list. Deactivating a skill hides it from new selections but keeps existing profile and role links intact."
       />
 
       <Card>

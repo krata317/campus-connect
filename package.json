@@ -17,6 +17,7 @@
     "db:check": "npm run db:check --workspace @campusconnect/api",
     "db:init": "npm run db:init --workspace @campusconnect/api",
     "db:test-setup": "npm run db:test-setup --workspace @campusconnect/api",
+    "db:migrate-tenants": "tsx apps/api/src/scripts/migrate-tenants.ts",
     "admin:bootstrap": "npm run admin:bootstrap --workspace @campusconnect/api",
     "build": "npm run build --workspace @campusconnect/web",
     "build:api": "npm run build --workspace @campusconnect/api",
@@ -27,8 +28,6 @@
     "typecheck": "npm run typecheck --workspace @campusconnect/shared && npm run typecheck --workspace @campusconnect/api && npm run typecheck --workspace @campusconnect/web"
   },
   "devDependencies": {
-    "@esbuild/win32-x64": "^0.28.2",
-    "@rollup/rollup-win32-x64-msvc": "^4.64.12",
     "concurrently": "^9.0.1"
   }
 }

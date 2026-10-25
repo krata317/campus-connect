@@ -2,6 +2,7 @@ import { beforeAll, afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { connectTestDatabase, disconnectTestDatabase, hasTestDb, resetDatabase, testDbSkipReason } from '../helpers/db';
 import { createTestClient, uniqueEmail, STUDENT_PASSWORD, EMPLOYER_PASSWORD, ADMIN_PASSWORD } from '../helpers/client';
 import { accountRepository } from '../../src/repositories/account.repository';
+import { collegeRepository } from '../../src/repositories/college.repository';
 import { hashPassword } from '../../src/lib/password';
 import { readOne } from '../../src/db/neo4j';
 
@@ -23,20 +24,44 @@ describeDb('authentication and access control', () => {
 
   beforeEach(async () => {
     await resetDatabase();
+    // The database was wiped, so any college created by a previous test is gone.
+    collegeSlug = '';
+    collegeId = '';
   });
 
+  // Every account needs a tenant. A single college is created per test and
+  // reused by students, recruiters and administrators alike.
+  let collegeSlug = '';
+  let collegeId = '';
+
+  const ensureCollege = async (): Promise<string> => {
+    if (!collegeId) {
+      collegeSlug = `college-${Math.random().toString(36).slice(2, 10)}`;
+      const created = await collegeRepository.createWithAdmin(
+        { name: 'Northfield Institute of Technology', slug: collegeSlug, website: null, contactEmail: null, contactPhone: null },
+        { email: uniqueEmail('seed-admin'), passwordHash: await hashPassword('SeedAdminPass123'), name: 'Seed Admin' },
+      );
+      if (!created) throw new Error('Could not create the test college');
+      collegeId = created.collegeId;
+    }
+    return collegeSlug;
+  };
+
   const registerStudent = async (client = createTestClient(), email = uniqueEmail('student')) => {
+    const slug = await ensureCollege();
     const response = await client.post('/api/auth/register/student', {
       fullName: 'Asha Verma',
       email,
       password: STUDENT_PASSWORD,
+      collegeSlug: slug,
     });
     return { client, response, email };
   };
 
   const createAdmin = async (email = uniqueEmail('admin')) => {
+    await ensureCollege();
     const passwordHash = await hashPassword(ADMIN_PASSWORD);
-    const created = await accountRepository.createAdmin({ email, passwordHash, name: 'Placement Admin' });
+    const created = await accountRepository.createAdminInCollege(collegeId, { email, passwordHash, name: 'Placement Admin' });
     return { id: created.id, email, password: ADMIN_PASSWORD };
   };
 
@@ -88,6 +113,7 @@ describeDb('authentication and access control', () => {
       fullName: 'Someone Else',
       email,
       password: STUDENT_PASSWORD,
+      collegeSlug: await ensureCollege(),
     });
 
     expect(response.status).toBe(409);
@@ -153,6 +179,7 @@ describeDb('authentication and access control', () => {
       fullName: 'Asha Verma',
       email: uniqueEmail('student'),
       password: STUDENT_PASSWORD,
+      collegeSlug: await ensureCollege(),
     });
 
     expect(response.status).toBe(403);
@@ -167,6 +194,7 @@ describeDb('authentication and access control', () => {
       fullName: 'Asha Verma',
       email: uniqueEmail('student'),
       password: STUDENT_PASSWORD,
+      collegeSlug: await ensureCollege(),
     });
 
     expect(response.status).toBe(403);
@@ -192,6 +220,7 @@ describeDb('authentication and access control', () => {
     await employer.post('/api/auth/register/employer', {
       email: uniqueEmail('employer'),
       password: EMPLOYER_PASSWORD,
+      collegeSlug: await ensureCollege(),
       companyName: 'Northwind Systems',
       contactPersonName: 'Ravi Menon',
       contactPhone: '9876543210',
@@ -222,6 +251,7 @@ describeDb('authentication and access control', () => {
     const register = await client.post('/api/auth/register/employer', {
       email,
       password: EMPLOYER_PASSWORD,
+      collegeSlug: await ensureCollege(),
       companyName: 'Northwind Systems',
       website: 'https://northwind.example.com',
       contactPersonName: 'Ravi Menon',
@@ -261,6 +291,7 @@ describeDb('authentication and access control', () => {
     await employerA.post('/api/auth/register/employer', {
       email: uniqueEmail('employer'),
       password: EMPLOYER_PASSWORD,
+      collegeSlug: await ensureCollege(),
       companyName: 'Northwind Systems',
       contactPersonName: 'Ravi Menon',
       contactPhone: '9876543210',
@@ -289,6 +320,7 @@ describeDb('authentication and access control', () => {
     await employerB.post('/api/auth/register/employer', {
       email: uniqueEmail('employer'),
       password: EMPLOYER_PASSWORD,
+      collegeSlug: await ensureCollege(),
       companyName: 'Contoso Labs',
       contactPersonName: 'Priya Nair',
       contactPhone: '9876500000',

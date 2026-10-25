@@ -11,7 +11,7 @@ export const UnauthorizedPage = () => (
     <div className="space-y-1">
       <h1 className="text-xl font-semibold">This area is not available to your account</h1>
       <p className="text-sm text-muted-foreground">
-        CampusConnect has separate portals for students, employers and placement administrators. Sign in with the right account
+        CampusConnect has separate portals for students, recruiters and college administrators. Sign in with the right account
         type to continue.
       </p>
     </div>

@@ -11,6 +11,7 @@ import { studentRouter } from './routes/student.routes';
 import { employerRouter } from './routes/employer.routes';
 import { adminRouter } from './routes/admin.routes';
 import { skillRouter } from './routes/skill.routes';
+import { collegeRouter } from './routes/college.routes';
 import { verifyConnectivity } from './db/neo4j';
 
 export function createApp() {
@@ -32,6 +33,28 @@ export function createApp() {
   );
 
   app.use(express.json({ limit: '256kb' }));
+
+  /**
+   * Health endpoints are registered *before* the session middleware on
+   * purpose: if Neo4j is unreachable the session store cannot answer, and a
+   * probe must still be able to learn that the API is alive but not ready.
+   */
+  app.get('/api/health/live', (_req, res) => {
+    res.json({ status: 'ok', uptimeSeconds: Math.round(process.uptime()) });
+  });
+
+  const readiness: express.RequestHandler = async (_req, res) => {
+    try {
+      await verifyConnectivity();
+      res.json({ status: 'ok', database: 'up', time: new Date().toISOString() });
+    } catch {
+      res.status(503).json({ status: 'degraded', database: 'down', time: new Date().toISOString() });
+    }
+  };
+
+  app.get('/api/health', readiness);
+  app.get('/api/health/ready', readiness);
+
   app.use(cookieParser());
 
   app.use(
@@ -55,16 +78,8 @@ export function createApp() {
   app.use(ensureCsrfToken);
   app.use(verifyCsrf);
 
-  app.get('/api/health', async (_req, res) => {
-    try {
-      await verifyConnectivity();
-      res.json({ status: 'ok', database: 'up', time: new Date().toISOString() });
-    } catch {
-      res.status(503).json({ status: 'degraded', database: 'down', time: new Date().toISOString() });
-    }
-  });
-
   app.use('/api/auth', authRouter);
+  app.use('/api/colleges', collegeRouter);
   app.use('/api/students', studentRouter);
   app.use('/api/employer', employerRouter);
   app.use('/api/admin', adminRouter);

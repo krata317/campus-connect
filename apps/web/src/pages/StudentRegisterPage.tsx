@@ -6,6 +6,7 @@ import type { AuthUser } from '@campusconnect/shared';
 import { Alert, Spinner } from '@/components/ui/feedback';
 import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/form';
+import { CollegeSelect } from '@/components/shared/CollegeSelect';
 import { api, errorMessage } from '@/lib/api';
 import { applyFieldErrors, resolver } from '@/lib/form';
 import { dashboardPathFor, meQueryKey } from '@/hooks/useAuth';
@@ -16,6 +17,7 @@ type StudentRegisterForm = {
   password: string;
   confirmPassword: string;
   dateOfBirth: string;
+  collegeSlug: string;
 };
 
 export const StudentRegisterPage = () => {
@@ -29,7 +31,7 @@ export const StudentRegisterPage = () => {
     setError,
   } = useForm<StudentRegisterForm>({
     resolver: resolver<StudentRegisterForm>(studentRegisterSchema),
-    defaultValues: { fullName: '', email: '', password: '', confirmPassword: '', dateOfBirth: '' },
+    defaultValues: { fullName: '', email: '', password: '', confirmPassword: '', dateOfBirth: '', collegeSlug: '' },
   });
 
   const mutation = useMutation({
@@ -41,6 +43,7 @@ export const StudentRegisterPage = () => {
         email: parsed.email,
         password: parsed.password,
         dateOfBirth: parsed.dateOfBirth ?? null,
+        collegeSlug: parsed.collegeSlug,
       });
     },
     onSuccess: (data) => {
@@ -63,11 +66,22 @@ export const StudentRegisterPage = () => {
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold">Create your student account</h1>
         <p className="text-sm text-muted-foreground">
-          Only a name, email and password are required. You can complete the rest of your profile after signing in.
+          Choose your college, then add a name, email and password. You can complete the rest of your profile after signing
+          in.
         </p>
       </div>
 
       <form className="space-y-4 rounded-lg border border-border bg-white p-5" onSubmit={handleSubmit(onSubmit)} noValidate>
+        <Field
+          label="College"
+          htmlFor="collegeSlug"
+          error={errors.collegeSlug?.message}
+          hint="Your account is linked to this college. Only this college's placement cell can see your profile."
+          required
+        >
+          <CollegeSelect id="collegeSlug" {...register('collegeSlug')} />
+        </Field>
+
         <Field label="Full name" htmlFor="fullName" error={errors.fullName?.message} required>
           <Input id="fullName" autoComplete="name" placeholder="As printed on your college record" {...register('fullName')} />
         </Field>

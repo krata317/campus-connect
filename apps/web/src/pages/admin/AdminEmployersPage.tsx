@@ -56,8 +56,8 @@ export const AdminEmployersPage = () => {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Employer approvals"
-        description="Only approved employers can submit hiring requests. Rejecting an account blocks request creation but keeps the record for audit."
+        title="Recruiter approvals"
+        description="Only approved recruiters can submit hiring requests. Rejecting an account blocks request creation but keeps the record for audit."
       />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -98,14 +98,14 @@ export const AdminEmployersPage = () => {
       {review.isError ? <Alert tone="error">{errorMessage(review.error)}</Alert> : null}
 
       {employers.isLoading ? (
-        <LoadingState label="Loading employers" />
+        <LoadingState label="Loading recruiters" />
       ) : items.length === 0 ? (
         <Card>
           <CardContent>
             <EmptyState
               icon={<Building2 className="h-6 w-6" />}
-              title="No employer accounts here"
-              description="Employers appear here after registering through the public employer registration page."
+              title="No recruiter accounts here"
+              description="Recruiters appear here after registering through the public recruiter registration page."
             />
           </CardContent>
         </Card>
@@ -186,7 +186,7 @@ export const AdminEmployersPage = () => {
           }
         >
           <div className="space-y-4">
-            <Field label="Note for the employer" htmlFor="reviewNote" hint={reviewTarget?.action === 'REJECT' ? 'Required' : 'Optional'}>
+            <Field label="Note for the recruiter" htmlFor="reviewNote" hint={reviewTarget?.action === 'REJECT' ? 'Required' : 'Optional'}>
               <Textarea id="reviewNote" rows={3} value={note} onChange={(event) => setNote(event.target.value)} />
             </Field>
             <div className="flex justify-end gap-2">

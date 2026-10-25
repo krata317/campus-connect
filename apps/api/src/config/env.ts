@@ -39,20 +39,62 @@ const boolFromEnv = (defaultValue: boolean) =>
       return normalized === 'true' || normalized === '1' || normalized === 'yes';
     }, z.boolean());
 
-const envSchema = z.object({
-  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  PORT: z.coerce.number().int().min(1).max(65535).default(4000),
-  WEB_ORIGIN: z.string().trim().min(1).default('http://localhost:5173'),
-  NEO4J_URI: z.string().trim().min(1, 'NEO4J_URI is required'),
-  NEO4J_USERNAME: z.string().trim().min(1).default('neo4j'),
-  NEO4J_PASSWORD: z.string().min(1, 'NEO4J_PASSWORD is required'),
-  NEO4J_DATABASE: z.string().trim().min(1).default('neo4j'),
-  SESSION_SECRET: z.string().min(32, 'SESSION_SECRET must be at least 32 characters'),
-  SESSION_COOKIE_NAME: z.string().trim().min(1).default('cc.sid'),
-  SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(8760).default(168),
-  COOKIE_SECURE: boolFromEnv(false),
-  TRUST_PROXY: boolFromEnv(false),
-});
+const envSchema = z
+  .object({
+    NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+    PORT: z.coerce.number().int().min(1).max(65535).default(4000),
+    WEB_ORIGIN: z.string().trim().min(1).default('http://localhost:5173'),
+    NEO4J_URI: z.string().trim().min(1, 'NEO4J_URI is required'),
+    NEO4J_USERNAME: z.string().trim().min(1).default('neo4j'),
+    NEO4J_PASSWORD: z.string().min(1, 'NEO4J_PASSWORD is required'),
+    NEO4J_DATABASE: z.string().trim().min(1).default('neo4j'),
+    SESSION_SECRET: z.string().min(32, 'SESSION_SECRET must be at least 32 characters'),
+    SESSION_COOKIE_NAME: z.string().trim().min(1).default('cc.sid'),
+    SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(8760).default(168),
+    COOKIE_SECURE: boolFromEnv(false),
+    TRUST_PROXY: boolFromEnv(false),
+  })
+  .superRefine((data, ctx) => {
+    // Production refuses to boot with development defaults, so an insecure
+    // configuration is a startup error rather than a silent risk.
+    if (data.NODE_ENV !== 'production') return;
+
+    if (!data.WEB_ORIGIN.startsWith('https://')) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['WEB_ORIGIN'],
+        message: 'WEB_ORIGIN must be an https:// URL in production (the public site origin)',
+      });
+    }
+    if (!data.COOKIE_SECURE) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['COOKIE_SECURE'],
+        message: 'COOKIE_SECURE must be true in production so session cookies are only sent over HTTPS',
+      });
+    }
+    if (!data.TRUST_PROXY) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['TRUST_PROXY'],
+        message: 'TRUST_PROXY must be true in production so Express reads X-Forwarded-* headers from Nginx',
+      });
+    }
+    if (!data.NEO4J_URI.startsWith('neo4j+s://')) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['NEO4J_URI'],
+        message: 'NEO4J_URI must use the encrypted neo4j+s:// scheme in production (AuraDB)',
+      });
+    }
+    if (data.SESSION_SECRET.length < 48) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['SESSION_SECRET'],
+        message: 'SESSION_SECRET must be at least 48 characters in production',
+      });
+    }
+  });
 
 const parsed = envSchema.safeParse(process.env);
 

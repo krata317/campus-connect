@@ -12,7 +12,7 @@ const adminNav: NavItem[] = [
   { to: '/admin', label: 'Overview', icon: LayoutDashboard, end: true },
   { to: '/admin/students', label: 'Students', icon: Users },
   { to: '/admin/skills', label: 'Skill catalogue', icon: Wrench },
-  { to: '/admin/employers', label: 'Employer approvals', icon: Building2 },
+  { to: '/admin/employers', label: 'Recruiter approvals', icon: Building2 },
   { to: '/admin/requests', label: 'Hiring requests', icon: ClipboardList },
   { to: '/admin/dispatches', label: 'Dispatch history', icon: Send },
 ];
@@ -30,13 +30,13 @@ export const StudentLayout = () => (
 );
 
 export const AdminLayout = () => (
-  <AppShell roleLabel="Placement cell" navItems={adminNav}>
+  <AppShell roleLabel="College administrator" navItems={adminNav}>
     <Outlet />
   </AppShell>
 );
 
 export const EmployerLayout = () => (
-  <AppShell roleLabel="Employer portal" navItems={employerNav}>
+  <AppShell roleLabel="Recruiter portal" navItems={employerNav}>
     <Outlet />
   </AppShell>
 );
