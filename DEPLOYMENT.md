@@ -100,11 +100,12 @@ Run on the server as `ubuntu`:
 sudo apt update && sudo apt upgrade -y
 sudo apt install -y nginx git curl certbot
 
-# Node.js 20 LTS
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+# Node.js 24 LTS (Node 20 reached end-of-life in April 2026)
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt install -y nodejs
 
-node --version   # v20.x
+node --version   # v24.x
+npm --version    # 11.x
 nginx -v         # nginx/1.24.x on Ubuntu 24.04
 ```
 

@@ -123,7 +123,7 @@ DEPLOYMENT.md                Lightsail + AuraDB + Nginx + Certbot guide
 
 ### 4.1 Prerequisites
 
-- Node.js 20+
+- Node.js 24 LTS (Node 22 also works; Node 20 is end-of-life)
 - A Neo4j database. Either:
   - **Local:** Neo4j Desktop 5.x/2025+ with a DBMS created, or
   - **Cloud:** a free Neo4j AuraDB instance (use the `neo4j+s://` URI)
