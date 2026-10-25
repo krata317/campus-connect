@@ -506,8 +506,9 @@ changed and dispatching twice is refused (`409`).
 | `npm run dev` | API + web in watch mode |
 | `npm run typecheck` | Type-check all three workspaces |
 | `npm test` | Unit + integration (integration skips without `TEST_NEO4J_*`) |
-| `npm run build` | Production frontend build |
-| `npm run build:api` | Production API build (`apps/api/dist`) |
+| `npm run build` | Production build of **both** apps (`build:web` + `build:api`) |
+| `npm run build:web` | Production frontend build only |
+| `npm run build:api` | Production API build only (`apps/api/dist`) |
 | `npm run start:api` | Run the compiled API |
 | `npm run db:check` | Connection check plus per-college counts and orphan detection |
 | `npm run db:init` | Create missing constraints and indexes |
@@ -536,9 +537,21 @@ explicitly, and nothing is written without `--yes`. It is idempotent.
 
 ## 13. Deployment
 
-`DEPLOYMENT.md` walks through a single Lightsail server, Nginx, HTTPS via
-Certbot, Neo4j AuraDB Free, systemd, updates and rollback. Configuration
-templates live in `deploy/`.
+`DEPLOYMENT.md` walks through a single Lightsail server, Neo4j AuraDB Free,
+systemd, HTTPS via Certbot, updates and rollback.
+
+Configuration templates:
+
+- `deploy/nginx/campusconnect-http.conf` — stage 1, plain HTTP, no certificate
+  needed. Install this first so Certbot can validate the domain.
+- `deploy/nginx/campusconnect.conf` — stage 2, HTTPS. Install it only after the
+  certificate exists.
+- `deploy/systemd/campusconnect-api.service` — runs the compiled API as an
+  unprivileged user.
+
+In production the API binds to `127.0.0.1` (see `HOST` in `.env.example`), so
+port 4000 is never publicly reachable. The readiness endpoint returns `503`
+when Neo4j is unreachable, while the liveness endpoint keeps returning `200`.
 
 ---
 

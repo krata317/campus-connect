@@ -5,11 +5,15 @@
 #   sudo cp deploy/systemd/campusconnect-api.service /etc/systemd/system/
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now campusconnect-api
-#   sudo systemctl status campusconnect-api
+#   sudo systemctl status campusconnect-api --no-pager
 #   journalctl -u campusconnect-api -f          # live logs
 #
 # The service runs the compiled output (apps/api/dist/index.js), not tsx, so
 # production never needs the TypeScript toolchain at runtime.
+#
+# Ownership: /opt/campusconnect and /opt/campusconnect/.env must be readable by
+# the `campusconnect` user. The deployment guide ends with a single
+# `chown -R campusconnect:campusconnect /opt/campusconnect`.
 # ---------------------------------------------------------------------------
 
 [Unit]
@@ -18,13 +22,19 @@ Documentation=file:///opt/campusconnect/DEPLOYMENT.md
 After=network-online.target
 Wants=network-online.target
 
+# Restart policy belongs in [Unit]; these keys are ignored inside [Service].
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
 [Service]
 Type=simple
 User=campusconnect
 Group=campusconnect
 WorkingDirectory=/opt/campusconnect
 
-# Secrets and connection details live here, outside the repository.
+# Connection details and secrets. NODE_ENV is also set here so the service runs
+# in production mode even if the file omits it — but EnvironmentFile values take
+# precedence, so .env must contain NODE_ENV=production as well.
 EnvironmentFile=/opt/campusconnect/.env
 Environment=NODE_ENV=production
 
@@ -35,8 +45,6 @@ ExecStart=/usr/bin/node /opt/campusconnect/apps/api/dist/index.js
 # crash-looping. Restart only covers genuine process failures.
 Restart=on-failure
 RestartSec=5
-StartLimitIntervalSec=300
-StartLimitBurst=5
 
 # Graceful shutdown: the API closes the HTTP server and the Neo4j driver on
 # SIGTERM, so 20 seconds is plenty.

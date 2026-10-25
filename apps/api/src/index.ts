@@ -7,26 +7,28 @@ import { logger } from './lib/logger';
 const PRUNE_INTERVAL_MS = 15 * 60 * 1000;
 
 async function main(): Promise<void> {
-  try {
-    await verifyConnectivity();
-    logger.info(`Connected to Neo4j at ${env.NEO4J_URI} (database: ${env.NEO4J_DATABASE})`);
-  } catch (error) {
-    // The process stays up on purpose: liveness stays green, readiness reports
-    // 503, and the API recovers by itself when the database comes back (AuraDB
-    // Free pauses after inactivity).
-    logger.error(
-      'Neo4j is unreachable. The API is running but /api/health/ready will report 503 until the database is available.',
-      {
-        uri: env.NEO4J_URI,
-        reason: error instanceof Error ? error.message : String(error),
-      },
-    );
-  }
-
   const app = createApp();
-  const server = app.listen(env.PORT, () => {
-    logger.info(`CampusConnect API listening on port ${env.PORT} (${env.isProduction ? 'production' : env.NODE_ENV})`);
+  const server = app.listen(env.PORT, env.host, () => {
+    logger.info(
+      `CampusConnect API listening on http://${env.host}:${env.PORT} (${env.isProduction ? 'production' : env.NODE_ENV})`,
+    );
   });
+
+  // The database probe runs *after* the port is open and is not awaited. A slow
+  // or unreachable AuraDB instance must never delay startup or block systemd:
+  // liveness stays green, readiness reports 503, and the API recovers by itself
+  // when the database comes back (AuraDB Free pauses after inactivity).
+  void verifyConnectivity()
+    .then(() => logger.info(`Connected to Neo4j at ${env.NEO4J_URI} (database: ${env.NEO4J_DATABASE})`))
+    .catch((error: unknown) =>
+      logger.error(
+        'Neo4j is unreachable. The API is running but /api/health/ready will report 503 until the database is available.',
+        {
+          uri: env.NEO4J_URI,
+          reason: error instanceof Error ? error.message : String(error),
+        },
+      ),
+    );
 
   // Without this, a port clash surfaces as an unhandled 'error' event and a
   // raw stack trace — the most common first-run problem after a stale process.

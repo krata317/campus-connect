@@ -43,7 +43,21 @@ const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
     PORT: z.coerce.number().int().min(1).max(65535).default(4000),
-    WEB_ORIGIN: z.string().trim().min(1).default('http://localhost:5173'),
+    // Optional: the interface the HTTP server binds to. Left unset it becomes
+    // 127.0.0.1 in production (so the API is only reachable through Nginx) and
+    // 0.0.0.0 in development. An empty `HOST=` is treated as unset.
+    HOST: z.preprocess(
+      (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+      z.string().trim().min(1).optional(),
+    ),
+    // A trailing slash is the most common cause of a CORS origin mismatch,
+    // because browsers never send one. It is stripped before validation.
+    WEB_ORIGIN: z
+      .string()
+      .trim()
+      .min(1)
+      .default('http://localhost:5173')
+      .transform((value) => value.replace(/\/+$/, '')),
     NEO4J_URI: z.string().trim().min(1, 'NEO4J_URI is required'),
     NEO4J_USERNAME: z.string().trim().min(1).default('neo4j'),
     NEO4J_PASSWORD: z.string().min(1, 'NEO4J_PASSWORD is required'),
@@ -99,16 +113,28 @@ const envSchema = z
 const parsed = envSchema.safeParse(process.env);
 
 if (!parsed.success) {
+  // Print the problems as a plain list and stop. A stack trace here would bury
+  // the one line the operator actually needs to read.
   const issues = parsed.error.issues.map((issue) => `  - ${issue.path.join('.') || 'env'}: ${issue.message}`).join('\n');
-  throw new Error(
-    `Invalid environment configuration.\n${issues}\n\nCopy .env.example to .env in the project root and fill in the values.`,
+  console.error(
+    [
+      '',
+      'CampusConnect cannot start: the environment configuration is invalid.',
+      issues,
+      '',
+      'Fix the values above in the .env file in the project root.',
+      'Use .env.example as the template; NODE_ENV=production requires https and secure cookies.',
+      '',
+    ].join('\n'),
   );
+  process.exit(1);
 }
 
 export const env = {
   ...parsed.data,
   isProduction: parsed.data.NODE_ENV === 'production',
   isTest: parsed.data.NODE_ENV === 'test',
+  host: parsed.data.HOST ?? (parsed.data.NODE_ENV === 'production' ? '127.0.0.1' : '0.0.0.0'),
   repoRoot,
   sessionTtlMs: parsed.data.SESSION_TTL_HOURS * 60 * 60 * 1000,
 };
