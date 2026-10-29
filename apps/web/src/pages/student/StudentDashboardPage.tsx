@@ -15,7 +15,7 @@ import { cn, scoreText } from '@/lib/utils';
 export const StudentDashboardPage = () => {
   const dashboard = useQuery({
     queryKey: dashboardQueryKey,
-    queryFn: () => api.get<StudentDashboard>('/students/me/dashboard'),
+    queryFn: () => api.get<StudentDashboard>('/student/me/dashboard'),
   });
   const { user } = useCurrentUser();
 
@@ -32,8 +32,8 @@ export const StudentDashboardPage = () => {
       <PageHeader
         title={`Welcome, ${data.profile.fullName.split(' ')[0]}`}
         description={
-          user?.college
-            ? `${user.college.name} · keep your profile accurate — the placement cell evaluates these records when a recruiter submits a hiring request.`
+          user?.institute
+            ? `${user.institute.name} · keep your profile accurate — the placement cell evaluates these records when a recruiter submits a hiring request.`
             : 'Keep your profile accurate — the placement cell evaluates these records when a recruiter submits a hiring request.'
         }
         actions={
@@ -50,13 +50,13 @@ export const StudentDashboardPage = () => {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-end justify-between">
-              <p className="text-3xl font-semibold text-navy-900">{data.completion.percent}%</p>
+              <p className="text-3xl font-semibold text-foreground">{data.completion.percent}%</p>
               <p className="text-sm text-muted-foreground">
                 {data.completion.completed} of {data.completion.total} details recorded
               </p>
             </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-navy-100">
-              <div className="h-full rounded-full bg-navy-700 transition-all" style={{ width: `${data.completion.percent}%` }} />
+            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+              <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${data.completion.percent}%` }} />
             </div>
             {data.completion.missing.length > 0 ? (
               <div className="space-y-1.5">
@@ -70,7 +70,7 @@ export const StudentDashboardPage = () => {
                 </div>
               </div>
             ) : (
-              <p className="text-sm text-emerald-700">Every profile detail is filled in.</p>
+              <p className="text-sm text-success">Every profile detail is filled in.</p>
             )}
           </CardContent>
         </Card>
@@ -81,7 +81,7 @@ export const StudentDashboardPage = () => {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-baseline gap-2">
-              <p className="text-3xl font-semibold text-navy-900">{data.unreadNotifications}</p>
+              <p className="text-3xl font-semibold text-foreground">{data.unreadNotifications}</p>
               <p className="text-sm text-muted-foreground">unread</p>
             </div>
             <p className="text-sm text-muted-foreground">{data.totalNotifications} notification(s) received in total.</p>
@@ -99,9 +99,9 @@ export const StudentDashboardPage = () => {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-start gap-3">
-              <UserRound className="mt-0.5 h-4 w-4 text-navy-500" />
+              <UserRound className="mt-0.5 h-4 w-4 text-muted-foreground" />
               <div className="text-sm">
-                <p className="font-medium text-navy-900">{data.profile.fullName}</p>
+                <p className="font-medium text-foreground">{data.profile.fullName}</p>
                 <p className="text-muted-foreground">
                   {data.profile.email}
                   {data.profile.phone ? ` · ${data.profile.phone}` : ''}
@@ -113,9 +113,9 @@ export const StudentDashboardPage = () => {
             </div>
 
             <div className="flex items-start gap-3">
-              <BookOpen className="mt-0.5 h-4 w-4 text-navy-500" />
+              <BookOpen className="mt-0.5 h-4 w-4 text-muted-foreground" />
               <div className="text-sm">
-                <p className="font-medium text-navy-900">
+                <p className="font-medium text-foreground">
                   {undergrad ? `${undergrad.degree}, ${undergrad.branch}` : 'Undergraduate details not added'}
                 </p>
                 <p className="text-muted-foreground">
@@ -131,9 +131,9 @@ export const StudentDashboardPage = () => {
             </div>
 
             <div className="flex items-start gap-3">
-              <Briefcase className="mt-0.5 h-4 w-4 text-navy-500" />
+              <Briefcase className="mt-0.5 h-4 w-4 text-muted-foreground" />
               <div className="text-sm">
-                <p className="font-medium text-navy-900">
+                <p className="font-medium text-foreground">
                   {data.profile.skills.length} skill(s) · {data.profile.experiences.length} experience record(s)
                 </p>
                 <p className="text-muted-foreground">
@@ -147,7 +147,7 @@ export const StudentDashboardPage = () => {
         <Card>
           <CardHeader className="flex-row items-center justify-between">
             <CardTitle>Recent notifications</CardTitle>
-            <Link to="/student/notifications" className="inline-flex items-center gap-1 text-xs font-medium text-navy-700 hover:underline">
+            <Link to="/student/notifications" className="inline-flex items-center gap-1 text-xs font-medium text-foreground hover:underline">
               See all
               <ArrowRight className="h-3 w-3" />
             </Link>

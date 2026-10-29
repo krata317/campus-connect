@@ -83,7 +83,7 @@ export const EducationForm = ({ level, record }: { level: EducationLevel; record
             scoreValue: values.scoreValue,
             scoreScale: values.scoreType === 'CGPA' ? values.scoreScale : null,
           };
-      return api.put<{ profile: StudentProfile }>(`/students/me/education/${level}`, payload);
+      return api.put<{ profile: StudentProfile }>(`/student/me/education/${level}`, payload);
     },
     onSuccess: (data) => {
       queryClient.setQueryData(profileQueryKey, data.profile);
@@ -97,7 +97,7 @@ export const EducationForm = ({ level, record }: { level: EducationLevel; record
   });
 
   const remove = useMutation({
-    mutationFn: () => api.delete<{ profile: StudentProfile }>(`/students/me/education/${level}`),
+    mutationFn: () => api.delete<{ profile: StudentProfile }>(`/student/me/education/${level}`),
     onSuccess: (data) => {
       queryClient.setQueryData(profileQueryKey, data.profile);
       queryClient.invalidateQueries({ queryKey: ['student'] });
@@ -193,7 +193,7 @@ export const EducationForm = ({ level, record }: { level: EducationLevel; record
         {level === 'POSTGRAD' && record ? (
           <Button
             variant="ghost"
-            className="text-destructive hover:bg-red-50"
+            className="text-destructive hover:bg-destructive/10"
             onClick={() => {
               if (window.confirm('Remove your postgraduate record? This cannot be undone.')) remove.mutate();
             }}

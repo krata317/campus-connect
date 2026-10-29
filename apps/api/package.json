@@ -11,11 +11,11 @@
     "db:check": "tsx src/scripts/db-check.ts",
     "db:init": "tsx src/scripts/init-db.ts",
     "db:test-setup": "tsx src/scripts/create-test-db.ts",
-    "db:migrate-tenants": "tsx src/scripts/migrate-tenants.ts",
-    "admin:bootstrap": "tsx src/scripts/bootstrap-admin.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "db:reset": "tsx src/scripts/reset-db.ts",
+    "db:seed": "tsx src/scripts/seed-institute.ts"
   },
   "dependencies": {
     "@campusconnect/shared": "1.0.0",
@@ -27,6 +27,7 @@
     "express-rate-limit": "^7.4.1",
     "express-session": "^1.18.1",
     "neo4j-driver": "^5.26.0",
+    "nodemailer": "^10.2.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {

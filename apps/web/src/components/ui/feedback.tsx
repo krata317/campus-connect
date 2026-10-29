@@ -3,10 +3,10 @@ import { AlertCircle, CheckCircle2, Info, Loader2, TriangleAlert } from 'lucide-
 import { cn } from '@/lib/utils';
 
 const tones = {
-  info: { wrapper: 'border-navy-200 bg-navy-50 text-navy-800', Icon: Info },
-  success: { wrapper: 'border-emerald-200 bg-emerald-50 text-emerald-900', Icon: CheckCircle2 },
-  warning: { wrapper: 'border-amber-200 bg-amber-50 text-amber-900', Icon: TriangleAlert },
-  error: { wrapper: 'border-red-200 bg-red-50 text-red-900', Icon: AlertCircle },
+  info: { wrapper: 'border-border bg-muted text-foreground', Icon: Info },
+  success: { wrapper: 'border-success/30 bg-success/10 text-success', Icon: CheckCircle2 },
+  warning: { wrapper: 'border-warning/30 bg-warning/10 text-warning', Icon: TriangleAlert },
+  error: { wrapper: 'border-destructive/30 bg-destructive/10 text-destructive', Icon: AlertCircle },
 } as const;
 
 export const Alert = ({
@@ -52,10 +52,10 @@ export const EmptyState = ({
   description?: string;
   action?: ReactNode;
 }) => (
-  <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-white px-6 py-12 text-center">
-    {icon ? <div className="text-navy-400">{icon}</div> : null}
+  <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-card px-6 py-12 text-center">
+    {icon ? <div className="text-muted-foreground">{icon}</div> : null}
     <div className="space-y-1">
-      <p className="text-sm font-semibold text-navy-900">{title}</p>
+      <p className="text-sm font-semibold text-foreground">{title}</p>
       {description ? <p className="mx-auto max-w-md text-sm text-muted-foreground">{description}</p> : null}
     </div>
     {action}
@@ -81,7 +81,7 @@ export const PageHeader = ({
 );
 
 export const ErrorState = ({ message, onRetry }: { message: string; onRetry?: () => void }) => (
-  <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+  <div className="rounded-md border border-red-200 bg-destructive/10 px-4 py-3 text-sm text-red-900">
     <p>{message}</p>
     {onRetry ? (
       <button type="button" onClick={onRetry} className="mt-2 font-medium underline underline-offset-2">

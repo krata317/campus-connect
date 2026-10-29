@@ -1,4 +1,5 @@
 import { closeDriver, getNeo4jConfig, readOne, readQuery, verifyConnectivity } from '../db/neo4j';
+import { institutionCount } from '../data/aishe';
 
 async function main(): Promise<void> {
   const config = getNeo4jConfig();
@@ -9,7 +10,7 @@ async function main(): Promise<void> {
   try {
     await verifyConnectivity();
   } catch (error) {
-    console.error('\nConnection failed. Is the CampusConnect database running in Neo4j Desktop, or is the AuraDB instance awake?');
+    console.error('\nConnection failed. Is the Campus Connect database running in Neo4j Desktop, or is the AuraDB instance awake?');
     console.error(`Details: ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 1;
     return;
@@ -19,69 +20,69 @@ async function main(): Promise<void> {
   console.log(`\nConnected. Neo4j ${version?.version ?? 'unknown'}`);
 
   const counts = await readOne<{
-    colleges: number;
-    students: number;
+    institutes: number;
     admins: number;
-    employers: number;
+    recruiters: number;
+    students: number;
     skills: number;
     requests: number;
     roles: number;
     notifications: number;
-    orphaned: number;
+    pending: number;
   }>(
     `RETURN
-       COUNT { MATCH (c:College) } AS colleges,
-       COUNT { MATCH (s:Student) } AS students,
-       COUNT { MATCH (a:Admin) } AS admins,
-       COUNT { MATCH (e:EmployerAccount) } AS employers,
-       COUNT { MATCH (k:Skill) } AS skills,
-       COUNT { MATCH (h:HiringRequest) } AS requests,
-       COUNT { MATCH (j:JobRole) } AS roles,
+       COUNT { MATCH (n:Institute) } AS institutes,
+       COUNT { MATCH (n:InstituteAdmin) } AS admins,
+       COUNT { MATCH (n:Recruiter) } AS recruiters,
+       COUNT { MATCH (n:Student) } AS students,
+       COUNT { MATCH (n:Skill) } AS skills,
+       COUNT { MATCH (n:HiringRequest) } AS requests,
+       COUNT { MATCH (n:JobRole) } AS roles,
        COUNT { MATCH (n:Notification) } AS notifications,
-       COUNT { MATCH (x) WHERE (x:Student OR x:Admin OR x:EmployerAccount OR x:Company OR x:Skill OR x:HiringRequest OR x:JobRole OR x:Notification) AND x.collegeId IS NULL } AS orphaned`,
+       COUNT { MATCH (n:PendingRegistration) } AS pending`,
   );
 
   console.log('\nCurrent data:');
-  console.log(`  Colleges:            ${counts?.colleges ?? 0}`);
+  console.log(`  Institutes:          ${counts?.institutes ?? 0}`);
+  console.log(`  Institute admins:    ${counts?.admins ?? 0}`);
+  console.log(`  Recruiters:          ${counts?.recruiters ?? 0}`);
   console.log(`  Students:            ${counts?.students ?? 0}`);
-  console.log(`  Administrators:      ${counts?.admins ?? 0}`);
-  console.log(`  Recruiter accounts:  ${counts?.employers ?? 0}`);
   console.log(`  Skills:              ${counts?.skills ?? 0}`);
   console.log(`  Hiring requests:     ${counts?.requests ?? 0}`);
   console.log(`  Job roles:           ${counts?.roles ?? 0}`);
   console.log(`  Notifications:       ${counts?.notifications ?? 0}`);
+  console.log(`  Pending sign-ups:    ${counts?.pending ?? 0}`);
 
-  if ((counts?.orphaned ?? 0) > 0) {
-    console.log(`\n  WARNING: ${counts?.orphaned} record(s) have no college. Run "npm run db:migrate-tenants" to attach them.`);
-  }
-
-  const colleges = await readQuery<{
+  const institutes = await readQuery<{
     name: string;
-    slug: string;
+    aisheCode: string;
+    state: string;
     active: boolean;
     students: number;
     admins: number;
     requests: number;
   }>(
-    `MATCH (c:College)
-     RETURN c.name AS name, c.slug AS slug, c.active AS active,
-            COUNT { MATCH (:Student {collegeId: c.id}) } AS students,
-            COUNT { MATCH (:Admin {collegeId: c.id}) } AS admins,
-            COUNT { MATCH (:HiringRequest {collegeId: c.id}) } AS requests
-     ORDER BY toLower(c.name) ASC`,
+    `MATCH (i:Institute)
+     RETURN i.name AS name, i.aisheCode AS aisheCode, i.state AS state, i.active AS active,
+            COUNT { MATCH (:Student {instituteId: i.id}) } AS students,
+            COUNT { MATCH (:InstituteAdmin {instituteId: i.id}) } AS admins,
+            COUNT { MATCH (:HiringRequest {instituteId: i.id}) } AS requests
+     ORDER BY toLower(i.name) ASC`,
   );
 
-  if (colleges.length > 0) {
-    console.log('\nColleges:');
-    for (const college of colleges) {
-      const state = college.active === false ? 'inactive' : 'active';
+  if (institutes.length > 0) {
+    console.log('\nInstitutes:');
+    for (const institute of institutes) {
+      const state = institute.active === false ? 'inactive' : 'active';
       console.log(
-        `  ${college.name} [${college.slug}] — ${state} · ${college.students} student(s) · ${college.admins} admin(s) · ${college.requests} request(s)`,
+        `  ${institute.name} [${institute.aisheCode}] — ${state} · ${institute.students} student(s) · ${institute.admins} admin(s) · ${institute.requests} request(s)`,
       );
     }
   } else {
-    console.log('\nNo colleges yet. Create the first one with: npm run admin:bootstrap');
+    console.log('\nNo institutes yet. Register one through the UI, or run: npm run db:seed -- --confirm=' + config.database);
   }
+
+  console.log(`\nAISHE directory loaded: ${institutionCount()} institutions available for lookup.`);
 }
 
 main()

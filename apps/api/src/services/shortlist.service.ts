@@ -5,11 +5,13 @@ import { skillRepository } from '../repositories/skill.repository';
 import { shortlistRepository } from '../repositories/shortlist.repository';
 import { buildSkillNameMap, evaluateCandidate } from './eligibility.service';
 import { badRequest, conflict, notFound } from '../lib/errors';
+import { emailService } from './email.service';
+import { logger } from '../lib/logger';
 
 export interface CandidateListResult {
   role: JobRole;
   request: { id: string; title: string; status: string; assessmentInstructions: string | null };
-  company: { id: string; name: string };
+  recruiter: { id: string; name: string };
   candidates: CandidateEvaluation[];
   totalStudents: number;
   eligibleCount: number;
@@ -17,12 +19,14 @@ export interface CandidateListResult {
 }
 
 const composeMessage = (params: {
-  companyName: string;
+  recruiterName: string;
   roleTitle: string;
   assessmentInstructions: string | null;
   adminMessage: string | null;
 }): string => {
-  const parts = [`The college placement cell has shortlisted you for the role of ${params.roleTitle} at ${params.companyName}.`];
+  const parts = [
+    `The placement cell has shortlisted you for the role of ${params.roleTitle} at ${params.recruiterName}.`,
+  ];
   if (params.assessmentInstructions) {
     parts.push(`Assessment details from the recruiter: ${params.assessmentInstructions}`);
   }
@@ -30,24 +34,24 @@ const composeMessage = (params: {
     parts.push(params.adminMessage);
   }
   parts.push(
-    'This notification records a college nomination. It is not a job offer — use the registration link below to complete the recruiter’s own application process.',
+    'This notification records an institute nomination. It is not a job offer — use the registration link below to complete the recruiter’s own application process.',
   );
   return parts.join('\n\n');
 };
 
 export const shortlistService = {
-  async getRoleContext(roleId: string, collegeId: string) {
-    const context = await requestRepository.getRoleContext(roleId, collegeId);
+  async getRoleContext(roleId: string, instituteId: string) {
+    const context = await requestRepository.getRoleContext(roleId, instituteId);
     if (!context) throw notFound('Job role not found');
     return context;
   },
 
-  async getCandidates(roleId: string, collegeId: string, eligibleOnly: boolean): Promise<CandidateListResult> {
-    const context = await this.getRoleContext(roleId, collegeId);
+  async getCandidates(roleId: string, instituteId: string, eligibleOnly: boolean): Promise<CandidateListResult> {
+    const context = await this.getRoleContext(roleId, instituteId);
     const [skills, students, shortlist] = await Promise.all([
-      skillRepository.list(collegeId, { q: '', activeOnly: false }),
-      studentRepository.listForEvaluation(collegeId),
-      shortlistRepository.listForRole(roleId, collegeId),
+      skillRepository.list(instituteId, { q: '', activeOnly: false }),
+      studentRepository.listForEvaluation(instituteId),
+      shortlistRepository.listForRole(roleId, instituteId),
     ]);
 
     const nameMap = buildSkillNameMap(skills);
@@ -70,7 +74,7 @@ export const shortlistService = {
         status: context.request.status,
         assessmentInstructions: context.request.assessmentInstructions,
       },
-      company: context.company,
+      recruiter: context.recruiter,
       candidates: filtered,
       totalStudents: students.length,
       eligibleCount,
@@ -78,21 +82,21 @@ export const shortlistService = {
     };
   },
 
-  async saveShortlist(roleId: string, collegeId: string, studentIds: string[], adminId: string) {
-    const context = await this.getRoleContext(roleId, collegeId);
+  async saveShortlist(roleId: string, instituteId: string, studentIds: string[], adminId: string) {
+    const context = await this.getRoleContext(roleId, instituteId);
     if (context.request.status !== 'APPROVED') {
       throw conflict('Only approved hiring requests can be shortlisted');
     }
     const unique = [...new Set(studentIds)];
-    const saved = await shortlistRepository.replaceShortlist(roleId, collegeId, unique, adminId);
+    const saved = await shortlistRepository.replaceShortlist(roleId, instituteId, unique, adminId);
     if (saved !== unique.length) {
-      throw badRequest('One or more selected students are not part of this college');
+      throw badRequest('One or more selected students are not part of this institute');
     }
-    return { count: saved, entries: await shortlistRepository.listForRole(roleId, collegeId) };
+    return { count: saved, entries: await shortlistRepository.listForRole(roleId, instituteId) };
   },
 
-  async dispatch(input: { roleId: string; collegeId: string; studentIds: string[]; adminId: string; message: string | null }) {
-    const context = await this.getRoleContext(input.roleId, input.collegeId);
+  async dispatch(input: { roleId: string; instituteId: string; studentIds: string[]; adminId: string; message: string | null }) {
+    const context = await this.getRoleContext(input.roleId, input.instituteId);
     if (context.request.status !== 'APPROVED') {
       throw conflict('Only approved hiring requests can be dispatched');
     }
@@ -106,15 +110,15 @@ export const shortlistService = {
     }
 
     const [skills, students] = await Promise.all([
-      skillRepository.list(input.collegeId, { q: '', activeOnly: false }),
-      studentRepository.listForEvaluation(input.collegeId),
+      skillRepository.list(input.instituteId, { q: '', activeOnly: false }),
+      studentRepository.listForEvaluation(input.instituteId),
     ]);
     const nameMap = buildSkillNameMap(skills);
     const byId = new Map(students.map((student) => [student.id, student]));
 
     const missingStudents = unique.filter((id) => !byId.has(id));
     if (missingStudents.length > 0) {
-      throw badRequest('One or more selected students are not part of this college');
+      throw badRequest('One or more selected students are not part of this institute');
     }
 
     const ineligible = unique
@@ -130,7 +134,7 @@ export const shortlistService = {
     }
 
     const message = composeMessage({
-      companyName: context.company.name,
+      recruiterName: context.recruiter.name,
       roleTitle: context.role.title,
       assessmentInstructions: context.request.assessmentInstructions,
       adminMessage: input.message,
@@ -138,28 +142,54 @@ export const shortlistService = {
 
     const result = await shortlistRepository.dispatch({
       roleId: input.roleId,
-      collegeId: input.collegeId,
+      instituteId: input.instituteId,
       studentIds: unique,
       adminId: input.adminId,
-      title: `Shortlisted for ${context.role.title} at ${context.company.name}`,
+      title: `Shortlisted for ${context.role.title} at ${context.recruiter.name}`,
       message,
     });
+
+    const entries = await shortlistRepository.listForRole(input.roleId, input.instituteId);
+
+    // Optional emails go out after the database commit, and never fail the dispatch.
+    await Promise.all(
+      entries
+        .filter((entry) => unique.includes(entry.studentId))
+        .map(async (entry) => {
+          const student = byId.get(entry.studentId);
+          if (!student) return;
+          try {
+            await emailService.notifyStudentShortlist({
+              to: entry.email,
+              enabled: entry.emailNotifications,
+              studentName: student.fullName,
+              recruiterName: context.recruiter.name,
+              roleTitle: context.role.title,
+              instituteName: context.institute.name,
+              message,
+              registrationUrl: context.role.registrationUrl,
+            });
+          } catch (error) {
+            logger.warn('Shortlist email failed', { reason: error instanceof Error ? error.message : String(error) });
+          }
+        }),
+    );
 
     return {
       dispatched: result.dispatched,
       roleTitle: result.roleTitle,
-      companyName: result.companyName,
+      recruiterName: result.recruiterName,
       requestId: result.requestId,
-      entries: await shortlistRepository.listForRole(input.roleId, input.collegeId),
+      entries,
     };
   },
 
-  async getShortlist(roleId: string, collegeId: string) {
-    await this.getRoleContext(roleId, collegeId);
-    return shortlistRepository.listForRole(roleId, collegeId);
+  async getShortlist(roleId: string, instituteId: string) {
+    await this.getRoleContext(roleId, instituteId);
+    return shortlistRepository.listForRole(roleId, instituteId);
   },
 
-  async listDispatches(collegeId: string) {
-    return shortlistRepository.listDispatches(collegeId);
+  async listDispatches(instituteId: string) {
+    return shortlistRepository.listDispatches(instituteId);
   },
 };

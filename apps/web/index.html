@@ -1,13 +1,25 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="h-full">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="CampusConnect - college placement management portal" />
-    <title>CampusConnect</title>
+    <meta name="description" content="Campus Connect — campus placements for students, recruiters and institutes" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Campus Connect</title>
+    <script>
+      // Applied before the first paint so the wrong theme never flashes.
+      (function () {
+        try {
+          var stored = localStorage.getItem('cc-theme');
+          var dark = stored === 'dark';
+          if (dark) document.documentElement.classList.add('dark');
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+        } catch (e) {}
+      })();
+    </script>
   </head>
-  <body>
-    <div id="root"></div>
+  <body class="h-full">
+    <div id="root" class="h-full"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

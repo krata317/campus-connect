@@ -10,7 +10,7 @@ export const skillCatalogueQueryKey = ['skills', 'active'] as const;
 export function useStudentProfile() {
   return useQuery({
     queryKey: profileQueryKey,
-    queryFn: () => api.get<{ profile: StudentProfile }>('/students/me/profile').then((response) => response.profile),
+    queryFn: () => api.get<{ profile: StudentProfile }>('/student/me/profile').then((response) => response.profile),
   });
 }
 

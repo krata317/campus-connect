@@ -2,15 +2,18 @@ import { createApp } from './app';
 import { env } from './config/env';
 import { closeDriver, verifyConnectivity } from './db/neo4j';
 import { sessionRepository } from './repositories/session.repository';
+import { logEmailConfiguration } from './email/mailer';
 import { logger } from './lib/logger';
 
 const PRUNE_INTERVAL_MS = 15 * 60 * 1000;
 
 async function main(): Promise<void> {
+  logEmailConfiguration();
+
   const app = createApp();
   const server = app.listen(env.PORT, env.host, () => {
     logger.info(
-      `CampusConnect API listening on http://${env.host}:${env.PORT} (${env.isProduction ? 'production' : env.NODE_ENV})`,
+      `Campus Connect API listening on http://${env.host}:${env.PORT} (${env.isProduction ? 'production' : env.NODE_ENV})`,
     );
   });
 

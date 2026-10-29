@@ -4,7 +4,7 @@ import { employmentTypeLabel } from '@/lib/utils';
 const row = (label: string, value: string) => (
   <div key={label} className="flex flex-col gap-0.5 border-b border-border/70 py-1.5 last:border-0 sm:flex-row sm:justify-between sm:gap-4">
     <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</dt>
-    <dd className="text-sm text-navy-800 sm:text-right">{value}</dd>
+    <dd className="text-sm text-foreground sm:text-right">{value}</dd>
   </div>
 );
 

@@ -27,11 +27,11 @@ export const StudentNotificationsPage = () => {
 
   const notifications = useQuery({
     queryKey: [...notificationsQueryKey, page],
-    queryFn: () => api.get<NotificationPage>(`/students/me/notifications?page=${page}&pageSize=${PAGE_SIZE}`),
+    queryFn: () => api.get<NotificationPage>(`/student/me/notifications?page=${page}&pageSize=${PAGE_SIZE}`),
   });
 
   const markRead = useMutation({
-    mutationFn: (id: string) => api.post<{ ok: boolean }>(`/students/me/notifications/${id}/read`),
+    mutationFn: (id: string) => api.post<{ ok: boolean }>(`/student/me/notifications/${id}/read`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: notificationsQueryKey });
       queryClient.invalidateQueries({ queryKey: dashboardQueryKey });
@@ -53,7 +53,7 @@ export const StudentNotificationsPage = () => {
         actions={<Badge variant={data.unread > 0 ? 'warning' : 'outline'}>{data.unread} unread</Badge>}
       />
 
-      <div className="flex gap-1 rounded-lg border border-border bg-white p-1">
+      <div className="flex gap-1 rounded-lg border border-border bg-card p-1">
         {(['all', 'unread'] as const).map((value) => (
           <button
             key={value}
@@ -62,7 +62,7 @@ export const StudentNotificationsPage = () => {
             className={
               filter === value
                 ? 'rounded-md bg-navy-900 px-3 py-1.5 text-sm font-medium text-white'
-                : 'rounded-md px-3 py-1.5 text-sm font-medium text-navy-600 hover:bg-navy-50'
+                : 'rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted'
             }
           >
             {value === 'all' ? 'All notifications' : 'Unread only'}

@@ -7,11 +7,12 @@ import { Neo4jSessionStore } from './db/sessionStore';
 import { ensureCsrfToken, verifyCsrf } from './middleware/csrf';
 import { errorHandler, notFoundHandler } from './middleware/error';
 import { authRouter } from './routes/auth.routes';
+import { registrationRouter } from './routes/registration.routes';
 import { studentRouter } from './routes/student.routes';
-import { employerRouter } from './routes/employer.routes';
-import { adminRouter } from './routes/admin.routes';
+import { recruiterRouter } from './routes/recruiter.routes';
+import { instituteRouter, institutePublicRouter } from './routes/institute.routes';
 import { skillRouter } from './routes/skill.routes';
-import { collegeRouter } from './routes/college.routes';
+import { settingsRouter } from './routes/settings.routes';
 import { verifyConnectivity } from './db/neo4j';
 
 export function createApp() {
@@ -63,7 +64,9 @@ export function createApp() {
       secret: env.SESSION_SECRET,
       resave: false,
       saveUninitialized: false,
-      rolling: true,
+      // Not rolling: the expiry set at sign-in is final, so "Remember me" is a
+      // real 7-day limit and a normal sign-in really ends after 10 minutes.
+      rolling: false,
       store: new Neo4jSessionStore(env.sessionTtlMs),
       cookie: {
         httpOnly: true,
@@ -79,11 +82,13 @@ export function createApp() {
   app.use(verifyCsrf);
 
   app.use('/api/auth', authRouter);
-  app.use('/api/colleges', collegeRouter);
-  app.use('/api/students', studentRouter);
-  app.use('/api/employer', employerRouter);
-  app.use('/api/admin', adminRouter);
+  app.use('/api/registrations', registrationRouter);
+  app.use('/api/institutes', institutePublicRouter);
+  app.use('/api/institute', instituteRouter);
+  app.use('/api/student', studentRouter);
+  app.use('/api/recruiter', recruiterRouter);
   app.use('/api/skills', skillRouter);
+  app.use('/api/settings', settingsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

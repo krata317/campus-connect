@@ -1,4 +1,4 @@
-# Deploying CampusConnect on AWS Lightsail
+# Deploying Campus Connect on AWS Lightsail
 
 This guide takes the application from this repository to a public HTTPS site on
 **one** Lightsail server, with **Neo4j AuraDB Free** as the database. It assumes
@@ -180,10 +180,21 @@ NEO4J_DATABASE=neo4j
 
 SESSION_SECRET=<48+ random characters>
 SESSION_COOKIE_NAME=cc.sid
-SESSION_TTL_HOURS=168
+SESSION_TTL_MINUTES=10
+SESSION_REMEMBER_DAYS=7
 
 COOKIE_SECURE=true
 TRUST_PROXY=true
+
+# Email — registration and password reset depend on this
+APP_BASE_URL=https://campusconnect.duckdns.org
+EMAIL_TRANSPORT=smtp
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=campus.connect.krata@gmail.com
+SMTP_PASS=<16-character Gmail App Password>
+EMAIL_FROM=Campus Connect <campus.connect.krata@gmail.com>
 ```
 
 Generate the session secret:
@@ -200,6 +211,12 @@ Notes:
   so only Nginx can reach it.
 - `.env` must contain `NODE_ENV=production`. The systemd unit also sets it, but
   values in `.env` take precedence.
+- `SMTP_PASS` must be a **Gmail App Password**, not the account password. Create
+  one at <https://myaccount.google.com/apppasswords> after enabling 2-Step
+  Verification. Without it, registration cannot send verification codes and the
+  API will say so instead of pretending the email was sent.
+- Check the startup log after deploying: it prints either
+  `Email: SMTP via smtp.gmail.com:587` or a warning that SMTP is not configured.
 
 ---
 
@@ -215,7 +232,52 @@ sudo chmod 600 /opt/campusconnect/.env
 
 ---
 
-## 8. Create the schema and the first college
+## 8. Create the schema, then register the first institute
+
+### One-time reset of the AuraDB database
+
+> **Only for the migration to this version.** The previous test data used the
+> old schema (colleges, employers) and the new code cannot use it. This reset is
+> a single manual action, not part of a normal deployment: nothing in the app,
+> in `npm run db:init`, or in the systemd unit ever deletes data.
+
+The reset script refuses to run unless you repeat the exact database name from
+`NEO4J_DATABASE` (normally `neo4j`), and it prints the URI and database it is
+about to clear before it touches anything.
+
+**Option A — from the server** (recommended if `.env` already has the AuraDB
+credentials):
+
+```bash
+# 1. Check you are pointed at the right database. This prints the URI.
+sudo -u campusconnect -H bash -c 'cd /opt/campusconnect && npm run db:check'
+
+# 2. Read the confirmation line the script prints, then run it for real.
+sudo -u campusconnect -H bash -c 'cd /opt/campusconnect && npm run db:reset -- --confirm=neo4j'
+```
+
+The script prints `Target URI`, `Target database`, the number of nodes it
+deleted, and then creates every constraint and index. At the end you should see
+`Nodes remaining: 0`.
+
+**Option B — in the Aura console**, if you would rather not run a delete from
+the server:
+
+1. Open <https://console.neo4j.io>, select your instance, and click **Query**.
+2. Run this once, exactly as written:
+
+   ```cypher
+   MATCH (n) CALL { WITH n DETACH DELETE n } IN TRANSACTIONS OF 1000 ROWS;
+   ```
+
+3. Then, back on the server, create the schema:
+
+   ```bash
+   sudo -u campusconnect -H bash -c 'cd /opt/campusconnect && npm run db:init'
+   ```
+
+Either way the database ends up empty with the new schema, and the first
+institute registers itself through the app.
 
 ```bash
 sudo -u campusconnect -H bash -c 'cd /opt/campusconnect && npm run db:init'
@@ -223,13 +285,20 @@ sudo -u campusconnect -H bash -c 'cd /opt/campusconnect && npm run db:init'
 
 That creates constraints and indexes only — no business data.
 
+Institutes register themselves through the public flow at
+`https://YOUR-SUBDOMAIN/register/institute`: they enter their AISHE code, verify
+the contact email with a one-time code, and finish through a single-use link.
+This needs working SMTP (step 6), because the code and the link are emailed.
+
+If you need an institute before SMTP is working — for development, or to recover
+an administrator account — use the guarded seed command:
+
 ```bash
-sudo -u campusconnect -H bash -c 'cd /opt/campusconnect && npm run admin:bootstrap'
+sudo -u campusconnect -H bash -c 'cd /opt/campusconnect && SEED_AISHE_CODE=C-6560 SEED_ADMIN_EMAIL=you@example.com SEED_ADMIN_PASSWORD="a-strong-password" npm run db:seed -- --confirm=neo4j'
 ```
 
-Prompts for a college name, a unique college slug, and the administrator's
-email, name and password. Run it again, with different details, for **each
-additional college**. There is no public endpoint for this on purpose.
+It prints the generated 32-character student code. This is a development and
+recovery shortcut, not the normal route.
 
 Verify:
 
@@ -237,7 +306,7 @@ Verify:
 sudo -u campusconnect -H bash -c 'cd /opt/campusconnect && npm run db:check'
 ```
 
-You should see one college, one administrator, zero students.
+You should see the institute, its administrator, and the AISHE directory size.
 
 ---
 

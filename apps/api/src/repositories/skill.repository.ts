@@ -16,9 +16,9 @@ interface SkillQueryRow {
   usageCount: number;
 }
 
-// Skills are per college: the same name may exist in two colleges, but a
-// single college cannot hold it twice (enforced by a composite constraint).
-const SKILL_QUERY = `MATCH (k:Skill {collegeId: $collegeId})
+// Skills are per institute: the same name may exist in two institutes, but a
+// single institute cannot hold it twice (enforced by a composite constraint).
+const SKILL_QUERY = `MATCH (k:Skill {instituteId: $instituteId})
 WHERE ($id IS NULL OR k.id = $id)
   AND ($nameKey IS NULL OR k.nameKey = $nameKey)
   AND ($ids IS NULL OR k.id IN $ids)
@@ -43,51 +43,51 @@ const defaults = { id: null, nameKey: null, ids: null, q: '', activeOnly: false 
 const mapRows = (rows: SkillQueryRow[]): SkillRow[] => rows.map((row) => ({ ...row.skill, usageCount: row.usageCount }));
 
 export const skillRepository = {
-  async list(collegeId: string, params: { q: string; activeOnly: boolean }): Promise<SkillRow[]> {
+  async list(instituteId: string, params: { q: string; activeOnly: boolean }): Promise<SkillRow[]> {
     const rows = await readQuery<SkillQueryRow>(SKILL_QUERY, {
       ...defaults,
-      collegeId,
+      instituteId,
       q: params.q,
       activeOnly: params.activeOnly,
     });
     return mapRows(rows);
   },
 
-  async findById(id: string, collegeId: string): Promise<SkillRow | null> {
-    const rows = await readQuery<SkillQueryRow>(SKILL_QUERY, { ...defaults, collegeId, id });
+  async findById(id: string, instituteId: string): Promise<SkillRow | null> {
+    const rows = await readQuery<SkillQueryRow>(SKILL_QUERY, { ...defaults, instituteId, id });
     const mapped = mapRows(rows);
     return mapped[0] ?? null;
   },
 
-  async findByNameKey(nameKey: string, collegeId: string): Promise<SkillRow | null> {
-    const rows = await readQuery<SkillQueryRow>(SKILL_QUERY, { ...defaults, collegeId, nameKey });
+  async findByNameKey(nameKey: string, instituteId: string): Promise<SkillRow | null> {
+    const rows = await readQuery<SkillQueryRow>(SKILL_QUERY, { ...defaults, instituteId, nameKey });
     const mapped = mapRows(rows);
     return mapped[0] ?? null;
   },
 
-  async findManyByIds(ids: string[], collegeId: string): Promise<SkillRow[]> {
+  async findManyByIds(ids: string[], instituteId: string): Promise<SkillRow[]> {
     if (ids.length === 0) return [];
-    const rows = await readQuery<SkillQueryRow>(SKILL_QUERY, { ...defaults, collegeId, ids });
+    const rows = await readQuery<SkillQueryRow>(SKILL_QUERY, { ...defaults, instituteId, ids });
     return mapRows(rows);
   },
 
-  async create(name: string, collegeId: string): Promise<SkillRow> {
+  async create(name: string, instituteId: string): Promise<SkillRow> {
     const id = newId('skl');
     const now = nowIso();
     const nameKey = normalizeSkillKey(name);
     await writeQuery(
-      `MATCH (college:College {id: $collegeId})
+      `MATCH (institute:Institute {id: $instituteId})
        CREATE (k:Skill {
-         id: $id, name: $name, nameKey: $nameKey, collegeId: $collegeId,
+         id: $id, name: $name, nameKey: $nameKey, instituteId: $instituteId,
          active: true, createdAt: $now, updatedAt: $now
        })
-       CREATE (k)-[:BELONGS_TO]->(college)`,
-      { id, name, nameKey, collegeId, now },
+       CREATE (k)-[:BELONGS_TO]->(institute)`,
+      { id, name, nameKey, instituteId, now },
     );
     return { id, name, nameKey, active: true, createdAt: now, updatedAt: now, usageCount: 0 };
   },
 
-  async update(id: string, collegeId: string, changes: { name?: string; active?: boolean }): Promise<boolean> {
+  async update(id: string, instituteId: string, changes: { name?: string; active?: boolean }): Promise<boolean> {
     const props: Record<string, unknown> = {};
     if (changes.name !== undefined) {
       props.name = changes.name;
@@ -96,14 +96,14 @@ export const skillRepository = {
     if (changes.active !== undefined) props.active = changes.active;
     if (Object.keys(props).length === 0) return false;
     const rows = await writeQuery<{ id: string }>(
-      'MATCH (k:Skill {id: $id, collegeId: $collegeId}) SET k += $props, k.updatedAt = $now RETURN k.id AS id',
-      { id, collegeId, props, now: nowIso() },
+      'MATCH (k:Skill {id: $id, instituteId: $instituteId}) SET k += $props, k.updatedAt = $now RETURN k.id AS id',
+      { id, instituteId, props, now: nowIso() },
     );
     return rows.length > 0;
   },
 
-  async countAll(collegeId: string): Promise<number> {
-    const row = await readOne<{ total: number }>('MATCH (k:Skill {collegeId: $collegeId}) RETURN count(k) AS total', { collegeId });
+  async countAll(instituteId: string): Promise<number> {
+    const row = await readOne<{ total: number }>('MATCH (k:Skill {instituteId: $instituteId}) RETURN count(k) AS total', { instituteId });
     return row?.total ?? 0;
   },
 };

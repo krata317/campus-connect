@@ -60,7 +60,7 @@ describe('RequireRole', () => {
     authState.isLoading = true;
     renderAt('/guard/student');
 
-    expect(screen.getByText(/loading campusconnect/i)).toBeInTheDocument();
+    expect(screen.getByText(/loading campus connect/i)).toBeInTheDocument();
   });
 
   it('sends a signed-in user of the wrong role to the unauthorized page', () => {

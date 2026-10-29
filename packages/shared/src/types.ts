@@ -1,13 +1,16 @@
-export type Role = 'STUDENT' | 'ADMIN' | 'EMPLOYER';
+export type Role = 'STUDENT' | 'RECRUITER' | 'INSTITUTE_ADMIN';
 
 /**
- * Every account, skill, hiring request and notification belongs to exactly one
- * College. The college is the tenant boundary for the whole application.
+ * An institute is the tenant boundary: its administrator, students, skills,
+ * hiring requests and notifications all belong to exactly one institute.
+ * The name, state and district are authoritative copies of the AISHE dataset.
  */
-export interface College {
+export interface Institute {
   id: string;
+  aisheCode: string;
   name: string;
-  slug: string;
+  state: string;
+  district: string;
   website: string | null;
   contactEmail: string | null;
   contactPhone: string | null;
@@ -16,11 +19,13 @@ export interface College {
   updatedAt: string;
 }
 
-/** The minimal college identity attached to an authenticated session. */
-export interface CollegeSummary {
+/** The minimal institute identity attached to an authenticated session. */
+export interface InstituteSummary {
   id: string;
   name: string;
-  slug: string;
+  aisheCode: string;
+  state: string;
+  district: string;
 }
 
 export type EducationLevel = 'CLASS_10' | 'CLASS_12' | 'UNDERGRAD' | 'POSTGRAD';
@@ -28,8 +33,6 @@ export type EducationLevel = 'CLASS_10' | 'CLASS_12' | 'UNDERGRAD' | 'POSTGRAD';
 export type ScoreType = 'PERCENTAGE' | 'CGPA';
 
 export type Gender = 'MALE' | 'FEMALE' | 'OTHER' | 'PREFER_NOT_TO_SAY';
-
-export type EmployerApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
 export type RequestStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'CHANGES_REQUESTED' | 'REJECTED';
 
@@ -42,6 +45,8 @@ export type EmploymentType = 'FULL_TIME' | 'INTERNSHIP' | 'PART_TIME' | 'CONTRAC
 export type EligibilityCheckStatus = 'PASS' | 'FAIL' | 'MISSING' | 'SKIPPED';
 
 export type NotificationType = 'SHORTLIST';
+
+export type RegistrationType = 'INSTITUTE' | 'RECRUITER';
 
 export interface EducationRecord {
   id: string;
@@ -86,6 +91,7 @@ export interface StudentProfile {
   github: string | null;
   portfolio: string | null;
   activeBacklogs: number | null;
+  emailNotifications: boolean;
   createdAt: string;
   updatedAt: string;
   education: EducationRecord[];
@@ -141,8 +147,12 @@ export interface HiringRequest {
   title: string;
   assessmentInstructions: string | null;
   status: RequestStatus;
-  companyId: string;
-  companyName: string;
+  /** The recruiter who submitted the request. */
+  recruiterId: string;
+  recruiterName: string;
+  /** The institute the request was sent to. */
+  instituteId: string;
+  instituteName: string;
   submittedAt: string | null;
   reviewedAt: string | null;
   reviewNote: string | null;
@@ -157,7 +167,7 @@ export interface NotificationRecord {
   type: NotificationType;
   title: string;
   message: string;
-  companyName: string;
+  recruiterName: string;
   roleTitle: string;
   registrationUrl: string;
   createdAt: string;
@@ -201,26 +211,18 @@ export interface CandidateEvaluation {
   shortlistStatus: ShortlistStatus | null;
 }
 
-export interface EmployerCompany {
-  company: {
-    id: string;
-    name: string;
-    website: string | null;
-    contactPersonName: string;
-    contactPhone: string;
-    contactEmail: string;
-    description: string | null;
-    createdAt: string;
-    updatedAt: string;
-  };
-  account: {
-    id: string;
-    email: string;
-    approvalStatus: EmployerApprovalStatus;
-    reviewNote: string | null;
-    reviewedAt: string | null;
-  };
-  reviewEvents: ReviewEvent[];
+/** The recruiter's own company details. A recruiter has no institute affiliation. */
+export interface RecruiterProfile {
+  id: string;
+  email: string;
+  companyName: string;
+  website: string | null;
+  contactPersonName: string;
+  contactPhone: string;
+  description: string | null;
+  emailNotifications: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface AuthUser {
@@ -228,9 +230,10 @@ export interface AuthUser {
   role: Role;
   email: string;
   displayName: string;
-  /** The college this account belongs to. Resolved from the database on every request. */
-  college: CollegeSummary | null;
-  employerApprovalStatus?: EmployerApprovalStatus;
+  username?: string;
+  /** The institute this account belongs to. Resolved from the database on every request. */
+  institute: InstituteSummary | null;
+  emailNotifications: boolean;
 }
 
 export interface ProfileCompletion {
@@ -255,18 +258,16 @@ export interface Paginated<T> {
   pageSize: number;
 }
 
-export interface AdminStats {
+export interface InstituteStats {
   students: number;
   skills: number;
-  pendingEmployers: number;
-  approvedEmployers: number;
   requestsAwaitingReview: number;
   approvedRequests: number;
   notificationsSent: number;
   dispatches: number;
 }
 
-export interface AdminStudentListItem {
+export interface InstituteStudentListItem {
   id: string;
   fullName: string;
   email: string;
@@ -288,8 +289,41 @@ export interface DispatchSummary {
   roleTitle: string;
   requestId: string;
   requestTitle: string;
-  companyName: string;
+  recruiterName: string;
   dispatchedAt: string | null;
   recipientCount: number;
   readCount: number;
+}
+
+/** Returned by the AISHE lookup so the form can show the official record. */
+export interface InstitutionLookup {
+  aisheCode: string;
+  name: string;
+  state: string;
+  district: string;
+}
+
+export interface RegistrationStartResult {
+  pendingId: string;
+  email: string;
+  expiresAt: string;
+  /** Present for institute registrations so the form can show the official record. */
+  institution?: InstitutionLookup;
+}
+
+export interface RegistrationLinkInfo {
+  type: RegistrationType;
+  email: string;
+  instituteName?: string;
+  instituteState?: string;
+  instituteDistrict?: string;
+  aisheCode?: string;
+  companyName?: string;
+  expiresAt: string;
+}
+
+export interface StudentCodeView {
+  /** Only shown immediately after generation or rotation; the server stores a hash. */
+  code: string | null;
+  updatedAt: string | null;
 }

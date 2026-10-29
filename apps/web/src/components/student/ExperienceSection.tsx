@@ -86,8 +86,8 @@ export const ExperienceSection = ({ profile }: { profile: StudentProfile }) => {
         description: values.description,
       };
       return editing
-        ? api.put<{ profile: StudentProfile }>(`/students/me/experiences/${editing.id}`, payload)
-        : api.post<{ profile: StudentProfile }>('/students/me/experiences', payload);
+        ? api.put<{ profile: StudentProfile }>(`/student/me/experiences/${editing.id}`, payload)
+        : api.post<{ profile: StudentProfile }>('/student/me/experiences', payload);
     },
     onSuccess: (data) => {
       queryClient.setQueryData(profileQueryKey, data.profile);
@@ -102,7 +102,7 @@ export const ExperienceSection = ({ profile }: { profile: StudentProfile }) => {
   });
 
   const remove = useMutation({
-    mutationFn: (id: string) => api.delete<{ profile: StudentProfile }>(`/students/me/experiences/${id}`),
+    mutationFn: (id: string) => api.delete<{ profile: StudentProfile }>(`/student/me/experiences/${id}`),
     onSuccess: (data) => {
       queryClient.setQueryData(profileQueryKey, data.profile);
       queryClient.invalidateQueries({ queryKey: ['student'] });
@@ -128,10 +128,10 @@ export const ExperienceSection = ({ profile }: { profile: StudentProfile }) => {
       ) : (
         <div className="space-y-3">
           {profile.experiences.map((record) => (
-            <div key={record.id} className="rounded-md border border-border bg-white p-4">
+            <div key={record.id} className="rounded-md border border-border bg-card p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-navy-900">{record.jobTitle}</p>
+                  <p className="text-sm font-semibold text-foreground">{record.jobTitle}</p>
                   <p className="text-sm text-muted-foreground">{record.organization}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {record.startDate} → {record.isCurrent ? 'Present' : record.endDate ?? '—'}
@@ -144,7 +144,7 @@ export const ExperienceSection = ({ profile }: { profile: StudentProfile }) => {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="text-destructive hover:bg-red-50"
+                    className="text-destructive hover:bg-destructive/10"
                     aria-label="Delete experience"
                     onClick={() => {
                       if (window.confirm('Delete this experience record?')) remove.mutate(record.id);
@@ -154,7 +154,7 @@ export const ExperienceSection = ({ profile }: { profile: StudentProfile }) => {
                   </Button>
                 </div>
               </div>
-              {record.description ? <p className="mt-2 text-sm text-navy-700">{record.description}</p> : null}
+              {record.description ? <p className="mt-2 text-sm text-foreground">{record.description}</p> : null}
             </div>
           ))}
         </div>
@@ -178,8 +178,8 @@ export const ExperienceSection = ({ profile }: { profile: StudentProfile }) => {
               </Field>
             </div>
 
-            <label className="flex items-center gap-2 text-sm text-navy-800">
-              <input type="checkbox" className="h-4 w-4 accent-navy-700" {...register('isCurrent')} />
+            <label className="flex items-center gap-2 text-sm text-foreground">
+              <input type="checkbox" className="h-4 w-4 accent-primary" {...register('isCurrent')} />
               I currently work here
             </label>
 

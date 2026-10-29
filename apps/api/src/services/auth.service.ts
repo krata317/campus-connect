@@ -1,9 +1,15 @@
-import type { AuthUser, College, EmployerApprovalStatus, Role } from '@campusconnect/shared';
+import type { AuthUser, Role } from '@campusconnect/shared';
 import { accountRepository, type AccountRow } from '../repositories/account.repository';
-import { collegeRepository } from '../repositories/college.repository';
-import { employerRepository } from '../repositories/employer.repository';
+import { instituteRepository } from '../repositories/institute.repository';
+import { studentRepository } from '../repositories/student.repository';
+import { passwordResetRepository } from '../repositories/registration.repository';
+import { sessionRepository } from '../repositories/session.repository';
 import { hashPassword, verifyPassword } from '../lib/password';
-import { badRequest, conflict, forbidden, unauthorized } from '../lib/errors';
+import { badRequest, conflict, forbidden, gone, unauthorized } from '../lib/errors';
+import { generateToken, hashToken, isExpired, msFromNow, verifyStudentCode } from '../lib/tokens';
+import { env } from '../config/env';
+import { emailService } from './email.service';
+import { logger } from '../lib/logger';
 
 // A syntactically valid bcrypt hash used to equalise response time when no account matches.
 const DUMMY_HASH = '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy';
@@ -13,126 +19,106 @@ const toAuthUser = (account: AccountRow): AuthUser => ({
   role: account.kind,
   email: account.email,
   displayName: account.displayName,
-  college:
-    account.collegeId && account.collegeName && account.collegeSlug
-      ? { id: account.collegeId, name: account.collegeName, slug: account.collegeSlug }
+  emailNotifications: account.emailNotifications,
+  ...(account.username ? { username: account.username } : {}),
+  institute:
+    account.instituteId && account.instituteName
+      ? {
+          id: account.instituteId,
+          name: account.instituteName,
+          aisheCode: account.instituteAisheCode ?? '',
+          state: account.instituteState ?? '',
+          district: account.instituteDistrict ?? '',
+        }
       : null,
-  ...(account.kind === 'EMPLOYER' ? { employerApprovalStatus: (account.approvalStatus ?? 'PENDING') as EmployerApprovalStatus } : {}),
 });
 
-/**
- * Resolves a college from a client-supplied slug. The slug is only a lookup
- * key: the tenant id written to the graph always comes from the database row,
- * never from the request.
- */
-async function resolveCollege(slug: string): Promise<College> {
-  const college = await collegeRepository.findBySlug(slug);
-  if (!college) {
-    throw badRequest('That college could not be found. Choose a college from the list.');
-  }
-  if (!college.active) {
-    throw badRequest('That college is not currently accepting registrations.');
-  }
-  return college;
-}
+const looksLikeEmail = (value: string): boolean => value.includes('@');
 
 export const authService = {
+  /**
+   * Student sign-up. The institute and its shared student code are verified
+   * together on the server; the code is never accepted from a public listing.
+   */
   async registerStudent(input: {
     fullName: string;
     email: string;
     password: string;
     dateOfBirth: string | null;
-    collegeSlug: string;
+    instituteId: string;
+    studentCode: string;
   }): Promise<AuthUser> {
-    const existing = await accountRepository.findByEmail(input.email);
-    if (existing.length > 0) {
+    const institute = await instituteRepository.findById(input.instituteId);
+    if (!institute || !institute.active) {
+      throw badRequest('Choose a registered institute from the list.');
+    }
+
+    if (!verifyStudentCode(institute.id, input.studentCode, institute.studentCodeHash)) {
+      throw badRequest(
+        'That student code does not match this institute. Ask your placement cell for the current code.',
+      );
+    }
+
+    if (await accountRepository.emailExists(input.email)) {
       throw conflict('An account with this email address already exists. Try signing in instead.');
     }
-    const college = await resolveCollege(input.collegeSlug);
+
     const passwordHash = await hashPassword(input.password);
-    const id = await accountRepository.createStudent({
+    const id = await studentRepository.create({
       fullName: input.fullName,
       email: input.email,
       passwordHash,
       dateOfBirth: input.dateOfBirth,
-      collegeId: college.id,
+      instituteId: institute.id,
     });
+
+    if (!id) {
+      throw conflict('This institute is not accepting students right now.');
+    }
+
     return {
       id,
       role: 'STUDENT',
       email: input.email,
       displayName: input.fullName,
-      college: { id: college.id, name: college.name, slug: college.slug },
-    };
-  },
-
-  async registerEmployer(input: {
-    email: string;
-    password: string;
-    companyName: string;
-    website: string | null;
-    contactPersonName: string;
-    contactPhone: string;
-    companyEmail: string;
-    description: string | null;
-    collegeSlug: string;
-  }): Promise<AuthUser> {
-    const existing = await accountRepository.findByEmail(input.email);
-    if (existing.length > 0) {
-      throw conflict('An account with this email address already exists. Try signing in instead.');
-    }
-    const college = await resolveCollege(input.collegeSlug);
-    const passwordHash = await hashPassword(input.password);
-    const { employerId } = await employerRepository.register(
-      {
-        email: input.email,
-        passwordHash,
-        companyName: input.companyName,
-        website: input.website,
-        contactPersonName: input.contactPersonName,
-        contactPhone: input.contactPhone,
-        companyEmail: input.companyEmail,
-        description: input.description,
+      emailNotifications: true,
+      institute: {
+        id: institute.id,
+        name: institute.name,
+        aisheCode: institute.aisheCode,
+        state: institute.state,
+        district: institute.district,
       },
-      college.id,
-    );
-    return {
-      id: employerId,
-      role: 'EMPLOYER',
-      email: input.email,
-      displayName: input.companyName,
-      college: { id: college.id, name: college.name, slug: college.slug },
-      employerApprovalStatus: 'PENDING',
     };
   },
 
-  async login(input: { email: string; password: string; role?: Role }): Promise<AuthUser> {
-    const accounts = await accountRepository.findByEmail(input.email);
+  /** Sign in with an email address or a username. */
+  async login(input: { identifier: string; password: string; role?: Role }): Promise<AuthUser> {
+    const identifier = input.identifier.trim();
+    const accounts = looksLikeEmail(identifier)
+      ? await accountRepository.findByEmail(identifier.toLowerCase())
+      : await accountRepository.findByUsername(identifier.toLowerCase());
+
     const candidates = input.role ? accounts.filter((account) => account.kind === input.role) : accounts;
 
     if (candidates.length === 0) {
       await verifyPassword(input.password, DUMMY_HASH);
-      throw unauthorized('Email or password is incorrect');
+      throw unauthorized('Email/username or password is incorrect');
     }
 
     if (candidates.length > 1) {
-      throw conflict('This email is used by more than one account type. Choose the account type you want to sign in to.');
+      throw conflict('This sign-in detail is used by more than one account type. Choose the account type you want.');
     }
 
     const account = candidates[0] as AccountRow;
     const valid = await verifyPassword(input.password, account.passwordHash);
     if (!valid) {
-      throw unauthorized('Email or password is incorrect');
+      throw unauthorized('Email/username or password is incorrect');
     }
 
-    if (account.kind === 'ADMIN' && account.active === false) {
-      throw forbidden('This administrator account has been deactivated');
-    }
-
-    // An account without a tenant cannot be authorised safely, so it is
-    // rejected rather than being treated as global.
-    if (!account.collegeId) {
-      throw forbidden('This account is not linked to a college. Ask your placement cell to check the setup.');
+    // An institute administrator without a live institute cannot be authorised safely.
+    if (account.kind === 'INSTITUTE_ADMIN' && !account.instituteId) {
+      throw forbidden('This administrator account is not linked to an institute. Ask for help from your placement cell.');
     }
 
     return toAuthUser(account);
@@ -141,8 +127,57 @@ export const authService = {
   async loadUser(role: Role, id: string): Promise<AuthUser | null> {
     const account = await accountRepository.findById(role, id);
     if (!account) return null;
-    if (account.kind === 'ADMIN' && account.active === false) return null;
-    if (!account.collegeId) return null;
+    if (account.kind === 'INSTITUTE_ADMIN' && !account.instituteId) return null;
     return toAuthUser(account);
+  },
+
+  /**
+   * Always resolves successfully so the endpoint cannot be used to discover
+   * which addresses have accounts.
+   */
+  async requestPasswordReset(email: string, role: Role): Promise<void> {
+    const accounts = await accountRepository.findByEmail(email);
+    // Only the account of the chosen type can be reset, so a shared email
+    // address never lets one account type change another's password.
+    const account = accounts.find((candidate) => candidate.kind === role);
+    if (!account) {
+      logger.info('Password reset requested for an unknown address (no email sent)');
+      return;
+    }
+    if (!emailService.isConfigured()) {
+      logger.warn('Password reset requested but email delivery is not configured');
+      return;
+    }
+
+    const token = generateToken();
+    await passwordResetRepository.create({
+      tokenHash: hashToken(token),
+      accountKind: account.kind,
+      accountId: account.id,
+      email: account.email,
+      expiresAt: msFromNow(env.passwordResetTtlMs),
+    });
+
+    try {
+      await emailService.sendPasswordReset(account.email, `${env.appBaseUrl}/reset-password?token=${token}`);
+    } catch (error) {
+      logger.warn('Password reset email failed', { reason: error instanceof Error ? error.message : String(error) });
+    }
+  },
+
+  async completePasswordReset(token: string, password: string): Promise<void> {
+    const record = await passwordResetRepository.consume(hashToken(token), new Date().toISOString());
+    if (!record || isExpired(record.expiresAt)) {
+      throw gone('This password reset link is invalid or has expired. Request a new one.');
+    }
+
+    const kind = record.accountKind as Role;
+    const passwordHash = await hashPassword(password);
+    const updated = await accountRepository.setPassword(kind, record.accountId, passwordHash);
+    if (!updated) throw gone('This account no longer exists.');
+
+    // A reset means the old password may be compromised: sign out every device
+    // that is still holding a session for this account.
+    await sessionRepository.destroyForUser(record.accountId);
   },
 };

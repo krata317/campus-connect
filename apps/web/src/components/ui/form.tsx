@@ -3,7 +3,7 @@ import type { InputHTMLAttributes, LabelHTMLAttributes, SelectHTMLAttributes, Te
 import { cn } from '@/lib/utils';
 
 const fieldBase =
-  'flex w-full rounded-md border border-input bg-white px-3 py-2 text-sm text-navy-900 shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:bg-muted';
+  'flex w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:bg-muted';
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(({ className, ...props }, ref) => (
   <input ref={ref} className={cn(fieldBase, 'h-9', className)} {...props} />
@@ -23,7 +23,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
 Select.displayName = 'Select';
 
 export const Label = ({ className, ...props }: LabelHTMLAttributes<HTMLLabelElement>) => (
-  <label className={cn('text-sm font-medium text-navy-800', className)} {...props} />
+  <label className={cn('text-sm font-medium text-foreground', className)} {...props} />
 );
 
 export const Field = ({
@@ -59,7 +59,7 @@ export const Checkbox = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInp
     ref={ref}
     type="checkbox"
     className={cn(
-      'h-4 w-4 shrink-0 cursor-pointer rounded border-input text-navy-700 accent-navy-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+      'h-4 w-4 shrink-0 cursor-pointer rounded border-input text-foreground accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
       className,
     )}
     {...props}

@@ -1,69 +1,69 @@
 import request from 'supertest';
-import type { Response, Test } from 'supertest';
+import type { Response as SupertestResponse } from 'supertest';
 import { createApp } from '../../src/app';
 
-/**
- * A cookie-aware HTTP client that also carries the double-submit CSRF token,
- * so integration tests exercise the same security path a browser does.
- */
-export interface TestClient {
-  /** Fetch a CSRF token and keep it for subsequent mutating calls. */
-  prime: () => Promise<string>;
-  get: (url: string) => Promise<Response>;
-  post: (url: string, body?: unknown) => Promise<Response>;
-  put: (url: string, body?: unknown) => Promise<Response>;
-  patch: (url: string, body?: unknown) => Promise<Response>;
-  del: (url: string) => Promise<Response>;
-  /** Send a mutating request with no CSRF header, to assert the guard fires. */
-  postWithoutCsrf: (url: string, body?: unknown) => Promise<Response>;
-  /** Send a mutating request with a wrong CSRF header. */
-  postWithBadCsrf: (url: string, body?: unknown) => Promise<Response>;
-}
+export const STUDENT_PASSWORD = 'StudentPass2026';
+export const RECRUITER_PASSWORD = 'RecruiterPass2026';
+export const ADMIN_PASSWORD = 'InstituteAdminPass2026';
 
 const app = createApp();
 
+let counter = 0;
+
+export const uniqueEmail = (prefix: string): string => {
+  counter += 1;
+  return `${prefix}.${Date.now().toString(36)}.${counter}@example.test`;
+};
+
+export const uniqueCompany = (base = 'Northwind Systems'): string => `${base} ${Date.now().toString(36)}${counter}`;
+
+export interface TestClient {
+  get: (path: string) => Promise<SupertestResponse>;
+  post: (path: string, body?: unknown) => Promise<SupertestResponse>;
+  put: (path: string, body?: unknown) => Promise<SupertestResponse>;
+  patch: (path: string, body?: unknown) => Promise<SupertestResponse>;
+  delete: (path: string) => Promise<SupertestResponse>;
+  postWithoutCsrf: (path: string, body?: unknown) => Promise<SupertestResponse>;
+  postWithBadCsrf: (path: string, body?: unknown) => Promise<SupertestResponse>;
+  prime: () => Promise<void>;
+}
+
+/**
+ * A cookie-aware client. It mirrors the browser: fetch the CSRF cookie first,
+ * then echo it in the header on every mutating request.
+ */
 export const createTestClient = (): TestClient => {
   const agent = request.agent(app);
-  let token: string | null = null;
+  let csrfToken = '';
 
-  const prime = async (): Promise<string> => {
-    if (token) return token;
+  const prime = async (): Promise<void> => {
     const response = await agent.get('/api/auth/csrf');
-    token = (response.body as { csrfToken: string }).csrfToken;
-    return token;
+    csrfToken = (response.body as { csrfToken?: string }).csrfToken ?? '';
   };
 
-  const mutate = async (method: 'post' | 'put' | 'patch' | 'delete', url: string, body?: unknown): Promise<Response> => {
-    const csrf = await prime();
-    let pending: Test = agent[method](url).set('X-CSRF-Token', csrf);
-    if (body !== undefined) pending = pending.send(body as object);
-    return pending;
+  const ensureCsrf = async (): Promise<string> => {
+    if (!csrfToken) await prime();
+    return csrfToken;
+  };
+
+  const send = async (method: 'get' | 'post' | 'put' | 'patch' | 'delete', path: string, body?: unknown, token = '') => {
+    const req = method === 'get' || method === 'delete' ? agent[method](path) : agent[method](path).send(body as object);
+    return token ? req.set('X-CSRF-Token', token) : req;
   };
 
   return {
     prime,
-    get: (url) => agent.get(url),
-    post: (url, body) => mutate('post', url, body),
-    put: (url, body) => mutate('put', url, body),
-    patch: (url, body) => mutate('patch', url, body),
-    del: (url) => mutate('delete', url),
-    postWithoutCsrf: (url, body) => {
-      let pending: Test = agent.post(url);
-      if (body !== undefined) pending = pending.send(body as object);
-      return pending;
-    },
-    postWithBadCsrf: (url, body) => {
-      let pending: Test = agent.post(url).set('X-CSRF-Token', 'x'.repeat(64));
-      if (body !== undefined) pending = pending.send(body as object);
-      return pending;
+    get: (path) => send('get', path),
+    post: async (path, body) => send('post', path, body, await ensureCsrf()),
+    put: async (path, body) => send('put', path, body, await ensureCsrf()),
+    patch: async (path, body) => send('patch', path, body, await ensureCsrf()),
+    delete: async (path) => send('delete', path, undefined, await ensureCsrf()),
+    postWithoutCsrf: (path, body) => send('post', path, body),
+    postWithBadCsrf: async (path, body) => {
+      await ensureCsrf();
+      return send('post', path, body, 'deadbeef'.repeat(8));
     },
   };
 };
 
-/** Unique email per test run so leftovers can never collide with fixtures. */
-export const uniqueEmail = (prefix: string): string =>
-  `${prefix}.${Date.now().toString(36)}.${Math.random().toString(36).slice(2, 8)}@campusconnect.test`;
-
-export const STUDENT_PASSWORD = 'StudentPass123';
-export const EMPLOYER_PASSWORD = 'EmployerPass123';
-export const ADMIN_PASSWORD = 'AdminPass123';
+export { app };

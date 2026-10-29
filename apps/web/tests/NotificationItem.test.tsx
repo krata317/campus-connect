@@ -9,7 +9,7 @@ const notification = (overrides: Partial<NotificationRecord> = {}): Notification
   type: 'SHORTLIST',
   title: 'You have been nominated',
   message: 'Northwind Systems has shortlisted you for Software Engineer.',
-  companyName: 'Northwind Systems',
+  recruiterName: 'Northwind Systems',
   roleTitle: 'Software Engineer',
   registrationUrl: 'https://northwind.example.com/apply',
   createdAt: '2026-02-01T09:00:00.000Z',
@@ -20,7 +20,7 @@ const notification = (overrides: Partial<NotificationRecord> = {}): Notification
 });
 
 describe('NotificationItem', () => {
-  it('shows the company, role and message so a student knows what it is about', () => {
+  it('shows the recruiter, role and message so a student knows what it is about', () => {
     render(<NotificationItem notification={notification()} />);
 
     expect(screen.getByText('You have been nominated')).toBeInTheDocument();

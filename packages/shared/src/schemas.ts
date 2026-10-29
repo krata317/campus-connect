@@ -76,63 +76,133 @@ export const requiredNumber = (min: number, max: number, label: string) =>
 
 export const passingYearSchema = requiredNumber(MIN_YEAR, MAX_YEAR, 'Passing year').int('Passing year must be a whole year');
 
-export const loginSchema = z.object({
-  email: emailSchema,
-  password: z.string().min(1, 'Password is required'),
-  role: z.enum(['STUDENT', 'ADMIN', 'EMPLOYER']).optional(),
-});
+// ---------------------------------------------------------------------------
+// Accounts and sign-in
+// ---------------------------------------------------------------------------
+
+export const roleSchema = z.enum(['STUDENT', 'RECRUITER', 'INSTITUTE_ADMIN']);
 
 /**
- * Turns a human-entered college name or identifier into a stable tenant slug.
- * Used by the bootstrap command, the API and the registration form so all three
- * agree on what a slug looks like.
+ * Sign-in accepts an email address or a username. Students only have an email;
+ * institute administrators and recruiters also choose a username.
  */
-export const normalizeCollegeSlug = (value: string): string =>
-  value
+export const loginSchema = z.object({
+  identifier: z
+    .string({ required_error: 'Email or username is required' })
     .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-
-export const collegeSlugSchema = z
-  .string({ required_error: 'College identifier is required' })
-  .trim()
-  .min(1, 'College identifier is required')
-  .max(80, 'College identifier must be at most 80 characters')
-  .transform(normalizeCollegeSlug)
-  .refine((value) => value.length >= 2, 'College identifier must be at least 2 characters')
-  .refine((value) => value.length <= 50, 'College identifier must be at most 50 characters')
-  .refine(
-    (value) => /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])$/.test(value),
-    'Use lowercase letters, numbers and hyphens, starting and ending with a letter or number',
-  );
-
-export const collegeCreateSchema = z.object({
-  name: requiredText('College name', 160),
-  slug: collegeSlugSchema,
-  website: optionalHttpUrlSchema,
-  contactEmail: z.preprocess(blankToNull, emailSchema.nullable()),
-  contactPhone: optionalText('Contact phone', 30),
+    .min(1, 'Email or username is required')
+    .max(254, 'Email or username is too long'),
+  password: z.string().min(1, 'Password is required'),
+  role: roleSchema.optional(),
+  // "Remember me": the session lasts 7 days instead of the default 10 minutes.
+  rememberMe: z.boolean().optional(),
 });
+
+export const usernameSchema = z
+  .string({ required_error: 'Username is required' })
+  .trim()
+  .toLowerCase()
+  .min(3, 'Username must be at least 3 characters')
+  .max(32, 'Username must be at most 32 characters')
+  .regex(/^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])$/, 'Use lowercase letters, numbers, dots, underscores or hyphens');
+
+/** AISHE codes look like "C-6560" or "U-0456"; the server normalises the rest. */
+export const aisheCodeSchema = z
+  .string({ required_error: 'AISHE code is required' })
+  .trim()
+  .min(3, 'AISHE code is required')
+  .max(20, 'AISHE code is too long')
+  .transform((value) => value.toUpperCase().replace(/\s+/g, ''))
+  .refine((value) => /^[A-Z]-?\d{1,6}$/.test(value), 'Enter a valid AISHE code, for example C-6560');
+
+/**
+ * Company names are compared after trimming, collapsing repeated whitespace and
+ * lower-casing. Punctuation is preserved, so "Acme Pvt. Ltd." and "Acme Pvt Ltd"
+ * are treated as different names.
+ */
+export const normalizeCompanyName = (value: string): string => value.trim().replace(/\s+/g, ' ');
+
+export const companyNameKey = (value: string): string => normalizeCompanyName(value).toLowerCase();
+
+export const companyNameSchema = z
+  .string({ required_error: 'Company name is required' })
+  .trim()
+  .min(2, 'Company name must be at least 2 characters')
+  .max(160, 'Company name must be at most 160 characters')
+  .transform(normalizeCompanyName);
+
+// ---------------------------------------------------------------------------
+// Two-step registration (OTP, then a single-use link)
+// ---------------------------------------------------------------------------
+
+export const instituteRegisterStartSchema = z.object({
+  aisheCode: aisheCodeSchema,
+  email: emailSchema,
+});
+
+export const recruiterRegisterStartSchema = z.object({
+  companyName: companyNameSchema,
+  email: emailSchema,
+});
+
+export const otpVerifySchema = z.object({
+  pendingId: z.string().trim().min(1, 'Missing registration reference'),
+  code: z
+    .string({ required_error: 'Enter the 6-digit code' })
+    .trim()
+    .regex(/^\d{6}$/, 'Enter the 6-digit code from the email'),
+});
+
+export const resendOtpSchema = z.object({
+  pendingId: z.string().trim().min(1, 'Missing registration reference'),
+});
+
+export const instituteRegisterCompleteSchema = z.object({
+  token: z.string().trim().min(20, 'This registration link is not valid'),
+  fullName: nameSchema,
+  username: usernameSchema,
+  password: passwordSchema,
+  contactPhone: optionalText('Contact phone', 30),
+  website: optionalHttpUrlSchema,
+});
+
+export const recruiterRegisterCompleteSchema = z.object({
+  token: z.string().trim().min(20, 'This registration link is not valid'),
+  contactPersonName: nameSchema,
+  contactPhone: requiredText('Contact phone', 30),
+  username: usernameSchema,
+  password: passwordSchema,
+  website: optionalHttpUrlSchema,
+  description: optionalText('Company description', 2000),
+});
+
+export const passwordResetRequestSchema = z.object({
+  email: emailSchema,
+  // The account type is required so a reset can never land on a different
+  // account that happens to share the same email address.
+  role: roleSchema,
+});
+
+export const passwordResetCompleteSchema = z.object({
+  token: z.string().trim().min(20, 'This reset link is not valid'),
+  password: passwordSchema,
+});
+
+// ---------------------------------------------------------------------------
+// Student registration
+// ---------------------------------------------------------------------------
 
 export const studentRegisterSchema = z.object({
   fullName: nameSchema,
   email: emailSchema,
   password: passwordSchema,
   dateOfBirth: optionalText('Date of birth', 10),
-  collegeSlug: collegeSlugSchema,
-});
-
-export const employerRegisterSchema = z.object({
-  email: emailSchema,
-  password: passwordSchema,
-  companyName: requiredText('Company name', 160),
-  website: optionalHttpUrlSchema,
-  contactPersonName: requiredText('Contact person name', 120),
-  contactPhone: requiredText('Contact phone', 30),
-  companyEmail: emailSchema,
-  description: optionalText('Company description', 2000),
-  collegeSlug: collegeSlugSchema,
+  instituteId: z.string().trim().min(1, 'Select your institute'),
+  studentCode: z
+    .string({ required_error: 'Institute student code is required' })
+    .trim()
+    .min(1, 'Institute student code is required')
+    .max(64, 'Institute student code is too long'),
 });
 
 export const profileUpdateSchema = z.object({
@@ -147,6 +217,28 @@ export const profileUpdateSchema = z.object({
   portfolio: optionalHttpUrlSchema,
   activeBacklogs: nullableNumber(0, 60, 'Active backlogs'),
 });
+
+export const notificationPreferenceSchema = z.object({
+  emailNotifications: z.boolean({ required_error: 'Choose whether to receive optional emails' }),
+});
+
+export const instituteProfileSchema = z.object({
+  website: optionalHttpUrlSchema,
+  contactEmail: z.preprocess(blankToNull, emailSchema.nullable()),
+  contactPhone: optionalText('Contact phone', 30),
+});
+
+export const recruiterProfileSchema = z.object({
+  companyName: companyNameSchema,
+  website: optionalHttpUrlSchema,
+  contactPersonName: nameSchema,
+  contactPhone: requiredText('Contact phone', 30),
+  description: optionalText('Company description', 2000),
+});
+
+// ---------------------------------------------------------------------------
+// Student profile records
+// ---------------------------------------------------------------------------
 
 const scoreFields = {
   scoreType: z.enum(['PERCENTAGE', 'CGPA'], { required_error: 'Score type is required' }),
@@ -174,20 +266,18 @@ const scoreRefinement = (data: { scoreType: 'PERCENTAGE' | 'CGPA'; scoreValue: n
   }
 };
 
-export const class10Schema = z
-  .object({
-    board: requiredText('Board', 120),
-    passingYear: passingYearSchema,
-    scoreValue: requiredNumber(0, 100, 'Percentage'),
-  });
+export const class10Schema = z.object({
+  board: requiredText('Board', 120),
+  passingYear: passingYearSchema,
+  scoreValue: requiredNumber(0, 100, 'Percentage'),
+});
 
-export const class12Schema = z
-  .object({
-    board: requiredText('Board', 120),
-    stream: requiredText('Stream', 80),
-    passingYear: passingYearSchema,
-    scoreValue: requiredNumber(0, 100, 'Percentage'),
-  });
+export const class12Schema = z.object({
+  board: requiredText('Board', 120),
+  stream: requiredText('Stream', 80),
+  passingYear: passingYearSchema,
+  scoreValue: requiredNumber(0, 100, 'Percentage'),
+});
 
 export const undergradSchema = z
   .object({
@@ -229,6 +319,10 @@ export const experienceSchema = z
 export const skillSelectionSchema = z.object({
   skillIds: z.array(z.string().min(1)).max(60, 'Select at most 60 skills'),
 });
+
+// ---------------------------------------------------------------------------
+// Hiring requests
+// ---------------------------------------------------------------------------
 
 export const jobCriteriaSchema = z
   .object({
@@ -293,26 +387,19 @@ export const hiringRequestSchema = z.object({
   roles: z.array(jobRoleSchema).min(1, 'Add at least one job role').max(10, 'A request can contain at most 10 roles'),
 });
 
-export const hiringRequestSubmitSchema = hiringRequestSchema.extend({
+/** A new request must name the institute it is addressed to. */
+export const hiringRequestCreateSchema = hiringRequestSchema.extend({
+  instituteId: z.string().trim().min(1, 'Choose the institute this request is for'),
   submit: z.boolean().default(false),
 });
 
-export const companyUpdateSchema = z.object({
-  name: requiredText('Company name', 160),
-  website: optionalHttpUrlSchema,
-  contactPersonName: requiredText('Contact person name', 120),
-  contactPhone: requiredText('Contact phone', 30),
-  contactEmail: emailSchema,
-  description: optionalText('Company description', 2000),
+/** Editing an existing request cannot move it to another institute. */
+export const hiringRequestUpdateSchema = hiringRequestSchema.extend({
+  submit: z.boolean().default(false),
 });
 
 export const reviewDecisionSchema = z.object({
   action: z.enum(['APPROVE', 'REJECT', 'REQUEST_CHANGES']),
-  note: optionalText('Note', 1000),
-});
-
-export const employerReviewSchema = z.object({
-  action: z.enum(['APPROVE', 'REJECT']),
   note: optionalText('Note', 1000),
 });
 

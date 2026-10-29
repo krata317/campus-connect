@@ -8,7 +8,7 @@ async function main(): Promise<void> {
   try {
     await verifyConnectivity();
   } catch (error) {
-    console.error('Cannot reach Neo4j. Start the CampusConnect database in Neo4j Desktop first.');
+    console.error('Cannot reach Neo4j. Start the Campus Connect database in Neo4j Desktop first.');
     console.error(`Details: ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 1;
     return;

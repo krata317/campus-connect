@@ -17,8 +17,6 @@
     "db:check": "npm run db:check --workspace @campusconnect/api",
     "db:init": "npm run db:init --workspace @campusconnect/api",
     "db:test-setup": "npm run db:test-setup --workspace @campusconnect/api",
-    "db:migrate-tenants": "tsx apps/api/src/scripts/migrate-tenants.ts",
-    "admin:bootstrap": "npm run admin:bootstrap --workspace @campusconnect/api",
     "build": "npm run build:web && npm run build:api",
     "build:web": "npm run build --workspace @campusconnect/web",
     "build:api": "npm run build --workspace @campusconnect/api",
@@ -26,7 +24,9 @@
     "test": "npm run test --workspace @campusconnect/api && npm run test --workspace @campusconnect/web",
     "test:api": "npm run test --workspace @campusconnect/api",
     "test:web": "npm run test --workspace @campusconnect/web",
-    "typecheck": "npm run typecheck --workspace @campusconnect/shared && npm run typecheck --workspace @campusconnect/api && npm run typecheck --workspace @campusconnect/web"
+    "typecheck": "npm run typecheck --workspace @campusconnect/shared && npm run typecheck --workspace @campusconnect/api && npm run typecheck --workspace @campusconnect/web",
+    "db:reset": "tsx apps/api/src/scripts/reset-db.ts",
+    "db:seed": "tsx apps/api/src/scripts/seed-institute.ts"
   },
   "devDependencies": {
     "concurrently": "^9.0.1"

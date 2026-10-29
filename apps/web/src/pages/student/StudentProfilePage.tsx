@@ -45,7 +45,7 @@ export const StudentProfilePage = () => {
         actions={<Badge variant="info">{data.skills.length} skills selected</Badge>}
       />
 
-      <div className="flex gap-1 overflow-x-auto rounded-lg border border-border bg-white p-1">
+      <div className="flex gap-1 overflow-x-auto rounded-lg border border-border bg-card p-1">
         {tabs.map((item) => (
           <button
             key={item.value}
@@ -53,7 +53,7 @@ export const StudentProfilePage = () => {
             onClick={() => setTab(item.value)}
             className={cn(
               'whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition-colors',
-              tab === item.value ? 'bg-navy-900 text-white' : 'text-navy-600 hover:bg-navy-50',
+              tab === item.value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted',
             )}
           >
             {item.label}
@@ -94,7 +94,7 @@ export const StudentProfilePage = () => {
           <CardHeader>
             <CardTitle>Skills</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Choose from the college skill catalogue. Free-text skills are not accepted, so eligibility matching stays consistent.
+              Choose from your institute’s skill catalogue. Free-text skills are not accepted, so eligibility matching stays consistent.
             </p>
           </CardHeader>
           <CardContent>

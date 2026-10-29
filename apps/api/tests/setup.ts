@@ -14,7 +14,7 @@ process.env.NODE_ENV = 'test';
 
 process.env.SESSION_SECRET ??= 'test-only-session-secret-value-not-for-production-use';
 process.env.SESSION_COOKIE_NAME ??= 'cc.sid';
-process.env.SESSION_TTL_HOURS ??= '168';
+process.env.SESSION_TTL_MINUTES ??= '10';
 process.env.COOKIE_SECURE ??= 'false';
 process.env.TRUST_PROXY ??= 'false';
 process.env.WEB_ORIGIN ??= 'http://localhost:5173';

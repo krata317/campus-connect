@@ -1,17 +1,23 @@
 import { beforeAll, afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { connectTestDatabase, disconnectTestDatabase, hasTestDb, resetDatabase, testDbSkipReason } from '../helpers/db';
-import { createTestClient, uniqueEmail, STUDENT_PASSWORD, EMPLOYER_PASSWORD, ADMIN_PASSWORD } from '../helpers/client';
-import { accountRepository } from '../../src/repositories/account.repository';
-import { collegeRepository } from '../../src/repositories/college.repository';
-import { hashPassword } from '../../src/lib/password';
-import { readOne } from '../../src/db/neo4j';
+import { createTestClient, uniqueEmail, STUDENT_PASSWORD, ADMIN_PASSWORD } from '../helpers/client';
+import { createInstituteFixture } from '../helpers/fixtures';
+import { getOutbox, clearOutbox } from '../../src/email/mailer';
+import { readOne, writeQuery } from '../../src/db/neo4j';
 
 const describeDb = hasTestDb ? describe : describe.skip;
 
 if (!hasTestDb) {
-  // Surfaced in the test output so a skipped run is never mistaken for a pass.
   console.warn(`[auth.test] ${testDbSkipReason}`);
 }
+
+const studentBody = (instituteId: string, studentCode: string, email = uniqueEmail('student')) => ({
+  fullName: 'Asha Verma',
+  email,
+  password: STUDENT_PASSWORD,
+  instituteId,
+  studentCode,
+});
 
 describeDb('authentication and access control', () => {
   beforeAll(async () => {
@@ -24,146 +30,129 @@ describeDb('authentication and access control', () => {
 
   beforeEach(async () => {
     await resetDatabase();
-    // The database was wiped, so any college created by a previous test is gone.
-    collegeSlug = '';
-    collegeId = '';
+    clearOutbox();
   });
 
-  // Every account needs a tenant. A single college is created per test and
-  // reused by students, recruiters and administrators alike.
-  let collegeSlug = '';
-  let collegeId = '';
-
-  const ensureCollege = async (): Promise<string> => {
-    if (!collegeId) {
-      collegeSlug = `college-${Math.random().toString(36).slice(2, 10)}`;
-      const created = await collegeRepository.createWithAdmin(
-        { name: 'Northfield Institute of Technology', slug: collegeSlug, website: null, contactEmail: null, contactPhone: null },
-        { email: uniqueEmail('seed-admin'), passwordHash: await hashPassword('SeedAdminPass123'), name: 'Seed Admin' },
-      );
-      if (!created) throw new Error('Could not create the test college');
-      collegeId = created.collegeId;
-    }
-    return collegeSlug;
-  };
-
-  const registerStudent = async (client = createTestClient(), email = uniqueEmail('student')) => {
-    const slug = await ensureCollege();
-    const response = await client.post('/api/auth/register/student', {
-      fullName: 'Asha Verma',
-      email,
-      password: STUDENT_PASSWORD,
-      collegeSlug: slug,
-    });
-    return { client, response, email };
-  };
-
-  const createAdmin = async (email = uniqueEmail('admin')) => {
-    await ensureCollege();
-    const passwordHash = await hashPassword(ADMIN_PASSWORD);
-    const created = await accountRepository.createAdminInCollege(collegeId, { email, passwordHash, name: 'Placement Admin' });
-    return { id: created.id, email, password: ADMIN_PASSWORD };
-  };
-
-  it('reports API health without touching any protected data', async () => {
+  it('registers a student when the institute code matches', async () => {
+    const institute = await createInstituteFixture();
     const client = createTestClient();
-    const response = await client.get('/api/health');
+    const email = uniqueEmail('student');
 
-    expect(response.status).toBe(200);
-  });
-
-  it('registers a student, opens a session and returns the signed-in user', async () => {
-    const { client, response, email } = await registerStudent();
+    const response = await client.post('/api/auth/register/student', studentBody(institute.instituteId, institute.studentCode, email));
 
     expect(response.status).toBe(201);
-    expect(response.body.user).toMatchObject({ role: 'STUDENT', email });
-    expect(response.body.user).not.toHaveProperty('passwordHash');
-    expect(response.body.user).not.toHaveProperty('password');
-
-    const me = await client.get('/api/auth/me');
-    expect(me.status).toBe(200);
-    expect(me.body.user.email).toBe(email);
+    expect(response.body.user.role).toBe('STUDENT');
+    expect(response.body.user.institute.id).toBe(institute.instituteId);
+    expect(response.body.user.email).toBe(email);
   });
 
-  it('keeps the session alive across separate requests without any client-side token', async () => {
-    const { client } = await registerStudent();
+  it('rejects a student code that belongs to another institute', async () => {
+    const northfield = await createInstituteFixture();
+    const lakeside = await createInstituteFixture({ name: 'Lakeside College' });
+    const client = createTestClient();
 
-    // Three sequential requests reuse only the cookie jar, exactly like a browser.
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      const me = await client.get('/api/auth/me');
-      expect(me.status).toBe(200);
-    }
+    const response = await client.post(
+      '/api/auth/register/student',
+      studentBody(northfield.instituteId, lakeside.studentCode),
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.message).toMatch(/student code/i);
   });
 
-  it('stores only a bcrypt hash, never the plaintext password', async () => {
-    const { email } = await registerStudent();
+  it('rejects an unknown institute', async () => {
+    const client = createTestClient();
+    const response = await client.post('/api/auth/register/student', studentBody('ins_missing', 'A'.repeat(32)));
+    expect(response.status).toBe(400);
+  });
 
-    const row = await readOne<{ passwordHash: string }>('MATCH (s:Student {email: $email}) RETURN s.passwordHash AS passwordHash', { email });
+  it('stores a bcrypt hash, never the plaintext password', async () => {
+    const institute = await createInstituteFixture();
+    const client = createTestClient();
+    const email = uniqueEmail('student');
+    await client.post('/api/auth/register/student', studentBody(institute.instituteId, institute.studentCode, email));
 
-    expect(row).not.toBeNull();
+    const row = await readOne<{ passwordHash: string }>('MATCH (s:Student {email: $email}) RETURN s.passwordHash AS passwordHash', {
+      email,
+    });
+
+    expect(row?.passwordHash).toBeTruthy();
     expect(row?.passwordHash).not.toBe(STUDENT_PASSWORD);
     expect(row?.passwordHash.startsWith('$2')).toBe(true);
   });
 
-  it('rejects a duplicate email with 409', async () => {
-    const { email } = await registerStudent();
-    const second = createTestClient();
-
-    const response = await second.post('/api/auth/register/student', {
-      fullName: 'Someone Else',
-      email,
-      password: STUDENT_PASSWORD,
-      collegeSlug: await ensureCollege(),
-    });
-
-    expect(response.status).toBe(409);
-    expect(response.body.error.code).toBe('CONFLICT');
-  });
-
-  it('rejects a password shorter than 8 characters with a field level error', async () => {
+  it('keeps the session alive across requests', async () => {
+    const institute = await createInstituteFixture();
     const client = createTestClient();
+    await client.post('/api/auth/register/student', studentBody(institute.instituteId, institute.studentCode));
 
-    const response = await client.post('/api/auth/register/student', {
-      fullName: 'Asha Verma',
-      email: uniqueEmail('student'),
-      password: 'short',
-    });
-
-    expect(response.status).toBe(400);
-    expect(response.body.error.code).toBe('VALIDATION_ERROR');
-    const fields = response.body.error.details.fields as { path: string; message: string }[];
-    expect(fields.some((field) => field.path === 'password')).toBe(true);
+    const me = await client.get('/api/auth/me');
+    expect(me.status).toBe(200);
+    expect(me.body.user.role).toBe('STUDENT');
   });
 
-  it('returns the same generic message for a wrong password and an unknown email', async () => {
-    const { email } = await registerStudent();
+  it('rejects a duplicate email address', async () => {
+    const institute = await createInstituteFixture();
+    const client = createTestClient();
+    const email = uniqueEmail('student');
 
-    const wrongPassword = await createTestClient().post('/api/auth/login', { email, password: 'WrongPassword123', role: 'STUDENT' });
-    const unknownEmail = await createTestClient().post('/api/auth/login', {
-      email: uniqueEmail('nobody'),
-      password: 'WrongPassword123',
-      role: 'STUDENT',
-    });
+    await client.post('/api/auth/register/student', studentBody(institute.instituteId, institute.studentCode, email));
+    const second = await createTestClient().post(
+      '/api/auth/register/student',
+      studentBody(institute.instituteId, institute.studentCode, email),
+    );
+
+    expect(second.status).toBe(409);
+  });
+
+  it('returns the same message for a wrong password and an unknown account', async () => {
+    const institute = await createInstituteFixture();
+    const email = uniqueEmail('student');
+    await createTestClient().post('/api/auth/register/student', studentBody(institute.instituteId, institute.studentCode, email));
+
+    const wrongPassword = await createTestClient().post('/api/auth/login', { identifier: email, password: 'WrongPass123' });
+    const unknown = await createTestClient().post('/api/auth/login', { identifier: uniqueEmail('nobody'), password: 'WrongPass123' });
 
     expect(wrongPassword.status).toBe(401);
-    expect(unknownEmail.status).toBe(401);
-    expect(wrongPassword.body.error.message).toBe(unknownEmail.body.error.message);
+    expect(unknown.status).toBe(401);
+    expect(wrongPassword.body.error.message).toBe(unknown.body.error.message);
   });
 
-  it('refuses to sign a student in through the administrator tab', async () => {
-    const { email } = await registerStudent();
+  it('refuses a student signing in through the administrator tab', async () => {
+    const institute = await createInstituteFixture();
+    const email = uniqueEmail('student');
+    await createTestClient().post('/api/auth/register/student', studentBody(institute.instituteId, institute.studentCode, email));
 
-    const response = await createTestClient().post('/api/auth/login', { email, password: STUDENT_PASSWORD, role: 'ADMIN' });
+    const response = await createTestClient().post('/api/auth/login', {
+      identifier: email,
+      password: STUDENT_PASSWORD,
+      role: 'INSTITUTE_ADMIN',
+    });
 
     expect(response.status).toBe(401);
   });
 
-  it('signs an existing student back in and clears the session on logout', async () => {
-    const { email } = await registerStudent();
+  it('signs an institute administrator in with a username', async () => {
+    const institute = await createInstituteFixture();
     const client = createTestClient();
 
-    const login = await client.post('/api/auth/login', { email, password: STUDENT_PASSWORD, role: 'STUDENT' });
+    const login = await client.post('/api/auth/login', {
+      identifier: institute.adminUsername,
+      password: ADMIN_PASSWORD,
+      role: 'INSTITUTE_ADMIN',
+    });
+
     expect(login.status).toBe(200);
+    expect(login.body.user.institute.id).toBe(institute.instituteId);
+
+    const stats = await client.get('/api/institute/stats');
+    expect(stats.status).toBe(200);
+  });
+
+  it('clears the session on sign out', async () => {
+    const institute = await createInstituteFixture();
+    const client = createTestClient();
+    await client.post('/api/auth/register/student', studentBody(institute.instituteId, institute.studentCode));
 
     const logout = await client.post('/api/auth/logout');
     expect(logout.status).toBe(204);
@@ -172,162 +161,178 @@ describeDb('authentication and access control', () => {
     expect(me.status).toBe(401);
   });
 
-  it('blocks mutating requests that arrive without a CSRF token', async () => {
+  it('blocks mutating requests without a CSRF token', async () => {
     const client = createTestClient();
-
-    const response = await client.postWithoutCsrf('/api/auth/register/student', {
-      fullName: 'Asha Verma',
-      email: uniqueEmail('student'),
-      password: STUDENT_PASSWORD,
-      collegeSlug: await ensureCollege(),
-    });
-
+    const response = await client.postWithoutCsrf('/api/auth/login', { identifier: 'a@b.test', password: 'x' });
     expect(response.status).toBe(403);
     expect(response.body.error.code).toBe('FORBIDDEN');
   });
 
-  it('blocks mutating requests whose CSRF token does not match the cookie', async () => {
+  it('blocks mutating requests with a mismatched CSRF token', async () => {
     const client = createTestClient();
-    await client.prime();
-
-    const response = await client.postWithBadCsrf('/api/auth/register/student', {
-      fullName: 'Asha Verma',
-      email: uniqueEmail('student'),
-      password: STUDENT_PASSWORD,
-      collegeSlug: await ensureCollege(),
-    });
-
+    const response = await client.postWithBadCsrf('/api/auth/login', { identifier: 'a@b.test', password: 'x' });
     expect(response.status).toBe(403);
   });
 
-  it('rejects anonymous access to protected routes with 401', async () => {
+  it('rejects anonymous access to protected routes', async () => {
     const client = createTestClient();
-
-    expect((await client.get('/api/admin/stats')).status).toBe(401);
-    expect((await client.get('/api/students/me/profile')).status).toBe(401);
-    expect((await client.get('/api/employer/me/company')).status).toBe(401);
+    expect((await client.get('/api/institute/stats')).status).toBe(401);
+    expect((await client.get('/api/student/me/profile')).status).toBe(401);
+    expect((await client.get('/api/recruiter/profile')).status).toBe(401);
   });
 
-  it('enforces role based access control on every portal', async () => {
-    const { client: student } = await registerStudent();
+  it('enforces role separation between the three portals', async () => {
+    const institute = await createInstituteFixture();
+    const studentClient = createTestClient();
+    await studentClient.post('/api/auth/register/student', studentBody(institute.instituteId, institute.studentCode));
 
-    expect((await student.get('/api/admin/stats')).status).toBe(403);
-    expect((await student.get('/api/employer/me/company')).status).toBe(403);
-    // The student's own portal still works.
-    expect((await student.get('/api/students/me/profile')).status).toBe(200);
+    expect((await studentClient.get('/api/institute/stats')).status).toBe(403);
+    expect((await studentClient.get('/api/recruiter/profile')).status).toBe(403);
+    expect((await institute.client.get('/api/student/me/profile')).status).toBe(403);
+  });
 
-    const employer = createTestClient();
-    await employer.post('/api/auth/register/employer', {
-      email: uniqueEmail('employer'),
-      password: EMPLOYER_PASSWORD,
-      collegeSlug: await ensureCollege(),
-      companyName: 'Northwind Systems',
-      contactPersonName: 'Ravi Menon',
-      contactPhone: '9876543210',
-      companyEmail: uniqueEmail('hr'),
+  it('resets a password through an emailed single-use link', async () => {
+    const institute = await createInstituteFixture();
+    const client = createTestClient();
+    const email = uniqueEmail('student');
+    await client.post('/api/auth/register/student', studentBody(institute.instituteId, institute.studentCode, email));
+    clearOutbox();
+
+    const request = await createTestClient().post('/api/auth/password-reset/request', { email, role: 'STUDENT' });
+    expect(request.status).toBe(200);
+
+    const message = getOutbox().find((entry) => entry.to === email);
+    expect(message).toBeTruthy();
+    const token = /token=([A-Za-z0-9_-]+)/.exec(message?.text ?? '')?.[1];
+    expect(token).toBeTruthy();
+
+    const complete = await createTestClient().post('/api/auth/password-reset/complete', {
+      token,
+      password: 'BrandNewPass2026',
     });
+    expect(complete.status).toBe(200);
 
-    expect((await employer.get('/api/admin/stats')).status).toBe(403);
-    expect((await employer.get('/api/students/me/profile')).status).toBe(403);
-  });
-
-  it('lets an administrator sign in after a one-time bootstrap and reach admin routes', async () => {
-    const admin = await createAdmin();
-    const client = createTestClient();
-
-    const login = await client.post('/api/auth/login', { email: admin.email, password: admin.password, role: 'ADMIN' });
+    const login = await createTestClient().post('/api/auth/login', { identifier: email, password: 'BrandNewPass2026' });
     expect(login.status).toBe(200);
-    expect(login.body.user.role).toBe('ADMIN');
 
-    const stats = await client.get('/api/admin/stats');
-    expect(stats.status).toBe(200);
-    expect(stats.body).toHaveProperty('students');
+    // The token is single-use.
+    const replay = await createTestClient().post('/api/auth/password-reset/complete', {
+      token,
+      password: 'AnotherPass2026',
+    });
+    expect(replay.status).toBe(410);
   });
 
-  it('creates an employer in PENDING state and blocks hiring requests until approval', async () => {
+  it('does not reveal whether an address has an account', async () => {
+    const known = await createInstituteFixture();
+    const knownRequest = await createTestClient().post('/api/auth/password-reset/request', { email: known.adminEmail, role: 'INSTITUTE_ADMIN' });
+    const unknownRequest = await createTestClient().post('/api/auth/password-reset/request', {
+      email: uniqueEmail('nobody'),
+      role: 'STUDENT',
+    });
+
+    expect(knownRequest.status).toBe(200);
+    expect(unknownRequest.status).toBe(200);
+    expect(knownRequest.body.message).toBe(unknownRequest.body.message);
+  });
+
+  it('gives a normal sign-in 10 minutes and a "Remember me" sign-in 7 days', async () => {
+    const institute = await createInstituteFixture();
     const client = createTestClient();
-    const email = uniqueEmail('employer');
+    const email = uniqueEmail('student');
 
-    const register = await client.post('/api/auth/register/employer', {
-      email,
-      password: EMPLOYER_PASSWORD,
-      collegeSlug: await ensureCollege(),
-      companyName: 'Northwind Systems',
-      website: 'https://northwind.example.com',
-      contactPersonName: 'Ravi Menon',
-      contactPhone: '9876543210',
-      companyEmail: uniqueEmail('hr'),
+    const registered = await client.post(
+      '/api/auth/register/student',
+      studentBody(institute.instituteId, institute.studentCode, email),
+    );
+    expect(registered.status).toBe(201);
+
+    const shortLived = await sessionExpiry(registered.body.user.id);
+    expect(shortLived).toBeTruthy();
+    expect(minutesFromNow(shortLived as string)).toBeGreaterThan(9);
+    expect(minutesFromNow(shortLived as string)).toBeLessThan(11);
+
+    const remembered = await createTestClient().post('/api/auth/login', {
+      identifier: email,
+      password: STUDENT_PASSWORD,
+      role: 'STUDENT',
+      rememberMe: true,
     });
+    expect(remembered.status).toBe(200);
 
-    expect(register.status).toBe(201);
-    expect(register.body.user.employerApprovalStatus).toBe('PENDING');
-
-    const company = await client.get('/api/employer/me/company');
-    expect(company.status).toBe(200);
-    expect(company.body.account.approvalStatus).toBe('PENDING');
-
-    const request = await client.post('/api/employer/me/requests', {
-      title: 'Campus drive 2026',
-      roles: [
-        {
-          title: 'Software Engineer',
-          description: 'Build backend services',
-          registrationUrl: 'https://northwind.example.com/apply',
-          criteria: {},
-        },
-      ],
-    });
-
-    expect(request.status).toBe(403);
-    expect(request.body.error.message).toMatch(/approval/i);
+    const longLived = await sessionExpiry(remembered.body.user.id);
+    expect(longLived).toBeTruthy();
+    expect(minutesFromNow(longLived as string)).toBeGreaterThan(7 * 24 * 60 - 5);
   });
 
-  it('does not let one employer read another employer request', async () => {
-    const admin = await createAdmin();
-    const adminClient = createTestClient();
-    await adminClient.post('/api/auth/login', { email: admin.email, password: admin.password, role: 'ADMIN' });
+  it('refuses protected requests once the session has expired', async () => {
+    const institute = await createInstituteFixture();
+    const client = createTestClient();
+    const registered = await client.post(
+      '/api/auth/register/student',
+      studentBody(institute.instituteId, institute.studentCode),
+    );
 
-    const employerA = createTestClient();
-    await employerA.post('/api/auth/register/employer', {
-      email: uniqueEmail('employer'),
-      password: EMPLOYER_PASSWORD,
-      collegeSlug: await ensureCollege(),
-      companyName: 'Northwind Systems',
-      contactPersonName: 'Ravi Menon',
-      contactPhone: '9876543210',
-      companyEmail: uniqueEmail('hr'),
-    });
-    const employerAId = (await employerA.get('/api/auth/me')).body.user.id as string;
+    const before = await client.get('/api/auth/me');
+    expect(before.status).toBe(200);
 
-    // Approve employer A so it can create a request.
-    await adminClient.post(`/api/admin/employers/${employerAId}/review`, { action: 'APPROVE' });
-
-    const created = await employerA.post('/api/employer/me/requests', {
-      title: 'Campus drive 2026',
-      roles: [
-        {
-          title: 'Software Engineer',
-          description: 'Build backend services',
-          registrationUrl: 'https://northwind.example.com/apply',
-          criteria: {},
-        },
-      ],
-    });
-    expect(created.status).toBe(201);
-    const requestId = created.body.request.id as string;
-
-    const employerB = createTestClient();
-    await employerB.post('/api/auth/register/employer', {
-      email: uniqueEmail('employer'),
-      password: EMPLOYER_PASSWORD,
-      collegeSlug: await ensureCollege(),
-      companyName: 'Contoso Labs',
-      contactPersonName: 'Priya Nair',
-      contactPhone: '9876500000',
-      companyEmail: uniqueEmail('hr'),
+    // Move the stored expiry into the past; the cookie itself stays valid.
+    await writeQuery('MATCH (s:Session {userId: $userId}) SET s.expiresAt = $past', {
+      userId: registered.body.user.id,
+      past: new Date(Date.now() - 1000).toISOString(),
     });
 
-    const peek = await employerB.get(`/api/employer/me/requests/${requestId}`);
-    expect(peek.status).toBe(404);
+    const after = await client.get('/api/auth/me');
+    expect(after.status).toBe(401);
+
+    const again = await client.get('/api/auth/me');
+    expect(again.status).toBe(401);
+  });
+
+  it('signs out existing sessions when a password is reset', async () => {
+    const institute = await createInstituteFixture();
+    const client = createTestClient();
+    const email = uniqueEmail('student');
+    await client.post('/api/auth/register/student', studentBody(institute.instituteId, institute.studentCode, email));
+    clearOutbox();
+
+    await createTestClient().post('/api/auth/password-reset/request', { email, role: 'STUDENT' });
+    const token = /token=([A-Za-z0-9_-]+)/.exec(getOutbox()[0]?.text ?? '')?.[1];
+    expect(token).toBeTruthy();
+
+    await createTestClient().post('/api/auth/password-reset/complete', { token, password: 'BrandNewPass2026' });
+
+    const me = await client.get('/api/auth/me');
+    expect(me.status).toBe(401);
+  });
+
+  it('only resets the account type that was chosen', async () => {
+    const institute = await createInstituteFixture();
+    clearOutbox();
+
+    // The administrator's address, but the student form was used.
+    await createTestClient().post('/api/auth/password-reset/request', {
+      email: institute.adminEmail,
+      role: 'STUDENT',
+    });
+    expect(getOutbox().filter((entry) => entry.to === institute.adminEmail)).toHaveLength(0);
+
+    await createTestClient().post('/api/auth/password-reset/request', {
+      email: institute.adminEmail,
+      role: 'INSTITUTE_ADMIN',
+    });
+    expect(getOutbox().filter((entry) => entry.to === institute.adminEmail)).toHaveLength(1);
   });
 });
+
+/** Minutes between now and an ISO timestamp (negative means already past). */
+const minutesFromNow = (iso: string): number => (new Date(iso).getTime() - Date.now()) / 60000;
+
+const sessionExpiry = async (userId: string): Promise<string | null> => {
+  // Newest first: a previous sign-in may still hold its own (shorter) session.
+  const row = await readOne<{ expiresAt: string }>(
+    'MATCH (s:Session {userId: $userId}) RETURN s.expiresAt AS expiresAt ORDER BY s.expiresAt DESC LIMIT 1',
+    { userId },
+  );
+  return row?.expiresAt ?? null;
+};

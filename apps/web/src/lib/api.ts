@@ -73,7 +73,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
     });
   } catch {
-    throw new ApiError(0, 'NETWORK_ERROR', 'Cannot reach the CampusConnect API. Make sure the backend is running on port 4000.');
+    throw new ApiError(0, 'NETWORK_ERROR', 'Cannot reach the Campus Connect API. Make sure the backend is running on port 4000.');
   }
 
   if (response.status === 204) {
@@ -92,6 +92,12 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   if (!response.ok) {
     const error = (payload as { error?: { code?: string; message?: string; details?: unknown } } | null)?.error;
+    // A 401 from a protected endpoint means the session has ended (expired,
+    // revoked, or signed out elsewhere). Tell the app so it can send the user
+    // back to the sign-in page instead of leaving broken panels on screen.
+    if (response.status === 401 && !path.startsWith('/auth/login') && path !== '/auth/me') {
+      window.dispatchEvent(new Event('cc:session-ended'));
+    }
     throw new ApiError(
       response.status,
       error?.code ?? 'REQUEST_FAILED',

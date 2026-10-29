@@ -12,7 +12,7 @@ import {
 } from '@campusconnect/shared';
 import { studentService } from '../services/student.service';
 import { asyncHandler, parseBody, parseQuery } from '../lib/validation';
-import { currentCollegeId, currentUser, requireAuth, requireRole } from '../middleware/auth';
+import { currentInstituteId, currentUser, requireAuth, requireRole } from '../middleware/auth';
 import { badRequest } from '../lib/errors';
 
 const educationLevelSchema = z.object({
@@ -28,7 +28,7 @@ studentRouter.use(requireAuth, requireRole('STUDENT'));
 studentRouter.get(
   '/me/profile',
   asyncHandler(async (req, res) => {
-    const profile = await studentService.getProfile(currentUser(req).id, currentCollegeId(req));
+    const profile = await studentService.getProfile(currentUser(req).id, currentInstituteId(req));
     res.json({ profile });
   }),
 );
@@ -37,7 +37,7 @@ studentRouter.put(
   '/me/profile',
   asyncHandler(async (req, res) => {
     const body = parseBody(profileUpdateSchema, req.body);
-    const profile = await studentService.updateProfile(currentUser(req).id, currentCollegeId(req), {
+    const profile = await studentService.updateProfile(currentUser(req).id, currentInstituteId(req), {
       fullName: body.fullName,
       dateOfBirth: body.dateOfBirth ?? null,
       gender: body.gender ?? null,
@@ -61,13 +61,13 @@ studentRouter.put(
 
     let profile;
     if (level === 'CLASS_10') {
-      profile = await studentService.upsertEducation(currentUser(req).id, currentCollegeId(req), level, parseBody(class10Schema, raw));
+      profile = await studentService.upsertEducation(currentUser(req).id, currentInstituteId(req), level, parseBody(class10Schema, raw));
     } else if (level === 'CLASS_12') {
-      profile = await studentService.upsertEducation(currentUser(req).id, currentCollegeId(req), level, parseBody(class12Schema, raw));
+      profile = await studentService.upsertEducation(currentUser(req).id, currentInstituteId(req), level, parseBody(class12Schema, raw));
     } else if (level === 'UNDERGRAD') {
-      profile = await studentService.upsertEducation(currentUser(req).id, currentCollegeId(req), level, parseBody(undergradSchema, raw));
+      profile = await studentService.upsertEducation(currentUser(req).id, currentInstituteId(req), level, parseBody(undergradSchema, raw));
     } else {
-      profile = await studentService.upsertEducation(currentUser(req).id, currentCollegeId(req), level, parseBody(postgradSchema, raw));
+      profile = await studentService.upsertEducation(currentUser(req).id, currentInstituteId(req), level, parseBody(postgradSchema, raw));
     }
 
     res.json({ profile });
@@ -81,7 +81,7 @@ studentRouter.delete(
     if (level === 'CLASS_10' || level === 'CLASS_12' || level === 'UNDERGRAD') {
       throw badRequest('Class 10, Class 12 and undergraduate records are required for placement eligibility. Update them instead of deleting.');
     }
-    const profile = await studentService.deleteEducation(currentUser(req).id, currentCollegeId(req), level);
+    const profile = await studentService.deleteEducation(currentUser(req).id, currentInstituteId(req), level);
     res.json({ profile });
   }),
 );
@@ -90,7 +90,7 @@ studentRouter.post(
   '/me/experiences',
   asyncHandler(async (req, res) => {
     const body = parseBody(experienceSchema, req.body);
-    const profile = await studentService.addExperience(currentUser(req).id, currentCollegeId(req), body);
+    const profile = await studentService.addExperience(currentUser(req).id, currentInstituteId(req), body);
     res.status(201).json({ profile });
   }),
 );
@@ -101,7 +101,7 @@ studentRouter.put(
     const body = parseBody(experienceSchema, req.body);
     const profile = await studentService.updateExperience(
       currentUser(req).id,
-      currentCollegeId(req),
+      currentInstituteId(req),
       req.params.id as string,
       body,
     );
@@ -112,7 +112,7 @@ studentRouter.put(
 studentRouter.delete(
   '/me/experiences/:id',
   asyncHandler(async (req, res) => {
-    const profile = await studentService.deleteExperience(currentUser(req).id, currentCollegeId(req), req.params.id as string);
+    const profile = await studentService.deleteExperience(currentUser(req).id, currentInstituteId(req), req.params.id as string);
     res.json({ profile });
   }),
 );
@@ -121,7 +121,7 @@ studentRouter.put(
   '/me/skills',
   asyncHandler(async (req, res) => {
     const body = parseBody(skillSelectionSchema, req.body);
-    const profile = await studentService.setSkills(currentUser(req).id, currentCollegeId(req), body.skillIds);
+    const profile = await studentService.setSkills(currentUser(req).id, currentInstituteId(req), body.skillIds);
     res.json({ profile });
   }),
 );
@@ -129,7 +129,7 @@ studentRouter.put(
 studentRouter.get(
   '/me/dashboard',
   asyncHandler(async (req, res) => {
-    const dashboard = await studentService.dashboard(currentUser(req).id, currentCollegeId(req));
+    const dashboard = await studentService.dashboard(currentUser(req).id, currentInstituteId(req));
     res.json(dashboard);
   }),
 );
@@ -138,7 +138,7 @@ studentRouter.get(
   '/me/notifications',
   asyncHandler(async (req, res) => {
     const query = parseQuery(paginationSchema, req.query);
-    const result = await studentService.listNotifications(currentUser(req).id, currentCollegeId(req), query.page, query.pageSize);
+    const result = await studentService.listNotifications(currentUser(req).id, currentInstituteId(req), query.page, query.pageSize);
     res.json(result);
   }),
 );
@@ -147,7 +147,7 @@ studentRouter.post(
   '/me/notifications/:id/read',
   asyncHandler(async (req, res) => {
     const { id } = parseBody(notificationParamsSchema, req.params);
-    await studentService.markNotificationRead(currentUser(req).id, currentCollegeId(req), id);
+    await studentService.markNotificationRead(currentUser(req).id, currentInstituteId(req), id);
     res.json({ ok: true });
   }),
 );
@@ -155,7 +155,7 @@ studentRouter.post(
 studentRouter.get(
   '/me/shortlists',
   asyncHandler(async (req, res) => {
-    const items = await studentService.shortlistHistory(currentUser(req).id, currentCollegeId(req));
+    const items = await studentService.shortlistHistory(currentUser(req).id, currentInstituteId(req));
     res.json({ items });
   }),
 );

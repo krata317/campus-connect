@@ -43,8 +43,22 @@ export const createRegisterLimiter = (options: LimiterOptions = {}) =>
     },
   });
 
+/** Verification codes and student codes are guesses at a secret, so they get a tighter window. */
+export const createVerificationLimiter = (options: LimiterOptions = {}) =>
+  rateLimit({
+    windowMs,
+    limit: options.limit ?? 20,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    skip: () => options.skip ?? false,
+    handler: (_req, res) => {
+      res.status(429).json(rateLimitResponse('Too many verification attempts. Wait a few minutes and try again.'));
+    },
+  });
+
 // The automated suite performs many sign-ins from a single address, so the
 // counters are skipped under NODE_ENV=test. The limiter itself is still covered
 // by a dedicated test that builds its own instance through the factory above.
 export const loginLimiter = createLoginLimiter({ skip: env.isTest });
 export const registerLimiter = createRegisterLimiter({ skip: env.isTest });
+export const verificationLimiter = createVerificationLimiter({ skip: env.isTest });

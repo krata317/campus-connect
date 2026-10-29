@@ -64,9 +64,37 @@ const envSchema = z
     NEO4J_DATABASE: z.string().trim().min(1).default('neo4j'),
     SESSION_SECRET: z.string().min(32, 'SESSION_SECRET must be at least 32 characters'),
     SESSION_COOKIE_NAME: z.string().trim().min(1).default('cc.sid'),
-    SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(8760).default(168),
+    // How long a normal sign-in lasts before the user must sign in again.
+    SESSION_TTL_MINUTES: z.coerce.number().int().min(1).max(1440).default(10),
+    // How long a "Remember me" sign-in lasts.
+    SESSION_REMEMBER_DAYS: z.coerce.number().int().min(1).max(30).default(7),
     COOKIE_SECURE: boolFromEnv(false),
     TRUST_PROXY: boolFromEnv(false),
+
+    // ---------------------------------------------------------------------
+    // Email
+    // ---------------------------------------------------------------------
+    // Public URL used to build links inside emails. Defaults to WEB_ORIGIN.
+    APP_BASE_URL: z.string().trim().min(1).optional(),
+    // "auto" uses SMTP when SMTP_HOST is set, otherwise an in-memory outbox
+    // that only logs the message (safe for local development and tests).
+    EMAIL_TRANSPORT: z.enum(['auto', 'smtp', 'memory']).default('auto'),
+    SMTP_HOST: z.string().trim().optional(),
+    SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(587),
+    SMTP_SECURE: boolFromEnv(false),
+    SMTP_USER: z.string().trim().optional(),
+    SMTP_PASS: z.string().optional(),
+    EMAIL_FROM: z.string().trim().default('Campus Connect <campus.connect.krata@gmail.com>'),
+
+    // ---------------------------------------------------------------------
+    // Verification windows
+    // ---------------------------------------------------------------------
+    OTP_TTL_MINUTES: z.coerce.number().int().min(2).max(60).default(10),
+    OTP_MAX_ATTEMPTS: z.coerce.number().int().min(3).max(20).default(5),
+    OTP_RESEND_COOLDOWN_SECONDS: z.coerce.number().int().min(15).max(600).default(60),
+    OTP_MAX_RESENDS: z.coerce.number().int().min(1).max(20).default(5),
+    REGISTRATION_TOKEN_TTL_MINUTES: z.coerce.number().int().min(10).max(1440).default(60),
+    PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().min(10).max(180).default(30),
   })
   .superRefine((data, ctx) => {
     // Production refuses to boot with development defaults, so an insecure
@@ -119,7 +147,7 @@ if (!parsed.success) {
   console.error(
     [
       '',
-      'CampusConnect cannot start: the environment configuration is invalid.',
+      'Campus Connect cannot start: the environment configuration is invalid.',
       issues,
       '',
       'Fix the values above in the .env file in the project root.',
@@ -130,13 +158,26 @@ if (!parsed.success) {
   process.exit(1);
 }
 
+const smtpConfigured = Boolean(parsed.data.SMTP_HOST && parsed.data.SMTP_USER && parsed.data.SMTP_PASS);
+const emailTransport: 'smtp' | 'memory' =
+  parsed.data.EMAIL_TRANSPORT === 'smtp' ? 'smtp' : parsed.data.EMAIL_TRANSPORT === 'memory' ? 'memory' : smtpConfigured ? 'smtp' : 'memory';
+
 export const env = {
   ...parsed.data,
   isProduction: parsed.data.NODE_ENV === 'production',
   isTest: parsed.data.NODE_ENV === 'test',
   host: parsed.data.HOST ?? (parsed.data.NODE_ENV === 'production' ? '127.0.0.1' : '0.0.0.0'),
   repoRoot,
-  sessionTtlMs: parsed.data.SESSION_TTL_HOURS * 60 * 60 * 1000,
+  sessionTtlMs: parsed.data.SESSION_TTL_MINUTES * 60 * 1000,
+  sessionRememberTtlMs: parsed.data.SESSION_REMEMBER_DAYS * 24 * 60 * 60 * 1000,
+  /** Public origin used for links inside emails. */
+  appBaseUrl: (parsed.data.APP_BASE_URL ?? parsed.data.WEB_ORIGIN).replace(/\/+$/, ''),
+  emailTransport,
+  /** True when real email delivery is possible. Registration refuses to start without it. */
+  emailConfigured: emailTransport === 'smtp' ? smtpConfigured : true,
+  otpTtlMs: parsed.data.OTP_TTL_MINUTES * 60 * 1000,
+  registrationTokenTtlMs: parsed.data.REGISTRATION_TOKEN_TTL_MINUTES * 60 * 1000,
+  passwordResetTtlMs: parsed.data.PASSWORD_RESET_TTL_MINUTES * 60 * 1000,
 };
 
 export type Env = typeof env;

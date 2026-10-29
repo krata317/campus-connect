@@ -20,14 +20,14 @@ export const ReviewHistory = ({ events }: { events: ReviewEvent[] }) => {
     <ol className="space-y-3">
       {events.map((event) => (
         <li key={event.id} className="relative border-l border-border pl-4">
-          <span className="absolute -left-[3px] top-1.5 h-1.5 w-1.5 rounded-full bg-navy-500" />
-          <p className="text-sm font-medium text-navy-900">{actionLabel(event.action)}</p>
+          <span className="absolute -left-[3px] top-1.5 h-1.5 w-1.5 rounded-full bg-muted0" />
+          <p className="text-sm font-medium text-foreground">{actionLabel(event.action)}</p>
           <p className="text-xs text-muted-foreground">
             {event.fromStatus ? `${statusLabel(event.fromStatus)} → ` : ''}
-            {statusLabel(event.toStatus)} · {event.actorRole === 'ADMIN' ? 'Placement cell' : 'Employer'} ·{' '}
+            {statusLabel(event.toStatus)} · {event.actorRole === 'INSTITUTE_ADMIN' ? 'Placement cell' : 'Employer'} ·{' '}
             {formatDateTime(event.at)}
           </p>
-          {event.note ? <p className="mt-1 text-sm text-navy-700">{event.note}</p> : null}
+          {event.note ? <p className="mt-1 text-sm text-foreground">{event.note}</p> : null}
         </li>
       ))}
     </ol>

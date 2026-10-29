@@ -1,12 +1,13 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import type { AuthUser, Role } from '@campusconnect/shared';
 import { api, ApiError } from '@/lib/api';
 
 export const meQueryKey = ['auth', 'me'] as const;
 
 export const dashboardPathFor = (role: Role): string => {
-  if (role === 'ADMIN') return '/admin';
-  if (role === 'EMPLOYER') return '/employer';
+  if (role === 'INSTITUTE_ADMIN') return '/institute';
+  if (role === 'RECRUITER') return '/recruiter';
   return '/student';
 };
 
@@ -33,4 +34,18 @@ export function useCurrentUser() {
     error: query.error,
     refetch: query.refetch,
   };
+}
+
+export function useLogout() {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+
+  return useMutation({
+    mutationFn: () => api.post('/auth/logout'),
+    onSuccess: () => {
+      queryClient.setQueryData(meQueryKey, null);
+      queryClient.clear();
+      navigate('/login', { replace: true });
+    },
+  });
 }

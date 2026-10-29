@@ -1,166 +1,147 @@
 import { readOne, readQuery, writeQuery } from '../db/neo4j';
-import { newId, nowIso } from '../lib/ids';
-
-export type AccountKind = 'ADMIN' | 'STUDENT' | 'EMPLOYER';
+import { nowIso } from '../lib/ids';
+import type { Role } from '@campusconnect/shared';
 
 export interface AccountRow {
   id: string;
+  kind: Role;
   email: string;
+  username: string | null;
   passwordHash: string;
   displayName: string;
-  kind: AccountKind;
-  active: boolean | null;
-  approvalStatus: string | null;
-  collegeId: string | null;
-  collegeName: string | null;
-  collegeSlug: string | null;
+  emailNotifications: boolean;
+  instituteId: string | null;
+  instituteName: string | null;
+  instituteAisheCode: string | null;
+  instituteState: string | null;
+  instituteDistrict: string | null;
 }
 
-interface RawAccountRow {
-  labels: string[];
+interface RawRow {
   id: string;
   email: string;
+  username: string | null;
   passwordHash: string;
   displayName: string | null;
-  active: boolean | null;
-  approvalStatus: string | null;
-  college: { id: string; name: string; slug: string } | null;
+  emailNotifications: boolean | null;
+  institute: { id: string; name: string; aisheCode: string; state: string; district: string } | null;
 }
 
-const kindFromLabels = (labels: string[]): AccountKind | null => {
-  if (labels.includes('Admin')) return 'ADMIN';
-  if (labels.includes('Student')) return 'STUDENT';
-  if (labels.includes('EmployerAccount')) return 'EMPLOYER';
-  return null;
+const LABELS: Record<Role, string> = {
+  STUDENT: 'Student',
+  INSTITUTE_ADMIN: 'InstituteAdmin',
+  RECRUITER: 'Recruiter',
 };
 
-const toAccount = (row: RawAccountRow): AccountRow | null => {
-  const kind = kindFromLabels(row.labels);
-  if (!kind) return null;
-  return {
-    id: row.id,
-    email: row.email,
-    passwordHash: row.passwordHash,
-    displayName: row.displayName ?? row.email,
-    kind,
-    active: row.active,
-    approvalStatus: row.approvalStatus,
-    collegeId: row.college?.id ?? null,
-    collegeName: row.college?.name ?? null,
-    collegeSlug: row.college?.slug ?? null,
-  };
+const PROJECTION = `a.id AS id, a.email AS email, a.username AS username, a.passwordHash AS passwordHash,
+  coalesce(a.fullName, a.contactPersonName, a.email) AS displayName,
+  a.emailNotifications AS emailNotifications,
+  i { .id, .name, .aisheCode, .state, .district } AS institute`;
+
+/** Only students and institute administrators belong to an institute. */
+const INSTITUTE_LINK: Record<Role, string> = {
+  STUDENT: 'OPTIONAL MATCH (a)-[:BELONGS_TO]->(i:Institute)',
+  INSTITUTE_ADMIN: 'OPTIONAL MATCH (a)-[:ADMINISTERS]->(i:Institute)',
+  RECRUITER: 'OPTIONAL MATCH (i:Institute) WHERE false',
 };
 
-/**
- * The tenant of an account is read from the graph, never from the request.
- * Admins reach their college through ADMINISTERS, everyone else through
- * BELONGS_TO.
- */
-const accountQuery = (matchClause: string, whereClause: string): string => `MATCH ${matchClause}
-${whereClause}
-OPTIONAL MATCH (company:Company)-[:HAS_ACCOUNT]->(a)
-OPTIONAL MATCH (a)-[:ADMINISTERS|BELONGS_TO]->(college:College)
-RETURN labels(a) AS labels, a.id AS id, a.email AS email, a.passwordHash AS passwordHash,
-       coalesce(a.fullName, a.name, company.name) AS displayName, a.active AS active,
-       a.approvalStatus AS approvalStatus,
-       college { .id, .name, .slug } AS college
-ORDER BY a.id`;
+const toAccount = (kind: Role, row: RawRow): AccountRow => ({
+  id: row.id,
+  kind,
+  email: row.email,
+  username: row.username ?? null,
+  passwordHash: row.passwordHash,
+  displayName: row.displayName ?? row.email,
+  emailNotifications: row.emailNotifications !== false,
+  instituteId: row.institute?.id ?? null,
+  instituteName: row.institute?.name ?? null,
+  instituteAisheCode: row.institute?.aisheCode ?? null,
+  instituteState: row.institute?.state ?? null,
+  instituteDistrict: row.institute?.district ?? null,
+});
+
+async function queryKind(kind: Role, predicate: string, params: Record<string, unknown>): Promise<AccountRow[]> {
+  const label = LABELS[kind];
+  const rows = await readQuery<RawRow>(
+    `MATCH (a:${label})
+     WHERE ${predicate}
+     ${INSTITUTE_LINK[kind]}
+     RETURN ${PROJECTION}`,
+    params,
+  );
+  return rows.map((row) => toAccount(kind, row));
+}
 
 export const accountRepository = {
+  /** All accounts using this email address (normally zero or one). */
   async findByEmail(email: string): Promise<AccountRow[]> {
-    const rows = await readQuery<RawAccountRow>(
-      accountQuery('(a)', 'WHERE (a:Admin OR a:Student OR a:EmployerAccount) AND a.email = $email'),
+    const results = await Promise.all(
+      (Object.keys(LABELS) as Role[]).map((kind) => queryKind(kind, 'a.email = $email', { email })),
+    );
+    return results.flat();
+  },
+
+  /** Institute administrators and recruiters may sign in with a username. */
+  async findByUsername(username: string): Promise<AccountRow[]> {
+    const results = await Promise.all([
+      queryKind('INSTITUTE_ADMIN', 'a.username = $username', { username }),
+      queryKind('RECRUITER', 'a.username = $username', { username }),
+    ]);
+    return results.flat();
+  },
+
+  async findById(kind: Role, id: string): Promise<AccountRow | null> {
+    const rows = await queryKind(kind, 'a.id = $id', { id });
+    return rows[0] ?? null;
+  },
+
+  /** True when the email is used by any account type. */
+  async emailExists(email: string): Promise<boolean> {
+    const row = await readOne<{ total: number }>(
+      `RETURN COUNT { MATCH (:Student {email: $email}) }
+            + COUNT { MATCH (:InstituteAdmin {email: $email}) }
+            + COUNT { MATCH (:Recruiter {email: $email}) } AS total`,
       { email },
     );
-    return rows.map(toAccount).filter((row): row is AccountRow => row !== null);
+    return (row?.total ?? 0) > 0;
   },
 
-  async findById(kind: AccountKind, id: string): Promise<AccountRow | null> {
-    // The label comes from a closed union, never from user input.
-    const label = kind === 'ADMIN' ? 'Admin' : kind === 'STUDENT' ? 'Student' : 'EmployerAccount';
-    const rows = await readQuery<RawAccountRow>(accountQuery(`(a:${label})`, 'WHERE a.id = $id'), { id });
-    const mapped = rows.map(toAccount).filter((row): row is AccountRow => row !== null);
-    return mapped[0] ?? null;
-  },
-
-  async countAdmins(): Promise<number> {
-    const row = await readOne<{ total: number }>('MATCH (a:Admin) RETURN count(a) AS total');
-    return row?.total ?? 0;
-  },
-
-  async countAdminsInCollege(collegeId: string): Promise<number> {
-    const row = await readOne<{ total: number }>('MATCH (a:Admin {collegeId: $collegeId}) RETURN count(a) AS total', { collegeId });
-    return row?.total ?? 0;
-  },
-
-  async createStudent(input: {
-    fullName: string;
-    email: string;
-    passwordHash: string;
-    dateOfBirth: string | null;
-    collegeId: string;
-  }): Promise<string> {
-    const id = newId('stu');
-    const now = nowIso();
-    await writeQuery(
-      `MATCH (college:College {id: $collegeId})
-       CREATE (s:Student {
-         id: $id, fullName: $fullName, email: $email, passwordHash: $passwordHash,
-         dateOfBirth: $dateOfBirth, collegeId: $collegeId, createdAt: $now, updatedAt: $now
-       })
-       CREATE (s)-[:BELONGS_TO]->(college)`,
-      {
-        id,
-        fullName: input.fullName,
-        email: input.email,
-        passwordHash: input.passwordHash,
-        dateOfBirth: input.dateOfBirth,
-        collegeId: input.collegeId,
-        now,
-      },
+  async usernameExists(username: string): Promise<boolean> {
+    const row = await readOne<{ total: number }>(
+      `RETURN COUNT { MATCH (:InstituteAdmin {username: $username}) }
+            + COUNT { MATCH (:Recruiter {username: $username}) } AS total`,
+      { username },
     );
-    return id;
+    return (row?.total ?? 0) > 0;
   },
 
-  /**
-   * Adds an administrator to an existing college. The first administrator of a
-   * college is created by the onboarding command; this is the path used when a
-   * college has more than one placement officer.
-   */
-  async createAdminInCollege(
-    collegeId: string,
-    input: { email: string; passwordHash: string; name: string },
-  ): Promise<{ id: string; email: string }> {
-    const id = newId('adm');
-    const now = nowIso();
-    await writeQuery(
-      `MATCH (college:College {id: $collegeId})
-       CREATE (a:Admin {
-         id: $id, email: $email, passwordHash: $passwordHash, name: $name,
-         collegeId: $collegeId, active: true, createdAt: $now
-       })
-       CREATE (a)-[:ADMINISTERS]->(college)`,
-      { id, collegeId, email: input.email, passwordHash: input.passwordHash, name: input.name, now },
+  async setEmailNotifications(kind: Role, id: string, enabled: boolean): Promise<boolean> {
+    const rows = await writeQuery<{ id: string }>(
+      `MATCH (a:${LABELS[kind]} {id: $id}) SET a.emailNotifications = $enabled, a.updatedAt = $now RETURN a.id AS id`,
+      { id, enabled, now: nowIso() },
     );
-    return { id, email: input.email };
+    return rows.length > 0;
   },
 
-  /**
-   * A per-slug mutex so two operators cannot bootstrap the same college at the
-   * same moment. The lock is released when the run finishes.
-   */
-  async claimBootstrapLock(key: string, token: string): Promise<boolean> {
-    // MERGE writes, so this must run in a write transaction.
-    const rows = await writeQuery<{ mine: boolean }>(
-      `MERGE (b:BootstrapLock {id: $key})
-       ON CREATE SET b.owner = $token, b.claimedAt = $now
-       RETURN b.owner = $token AS mine`,
-      { key, token, now: nowIso() },
+  async setPassword(kind: Role, id: string, passwordHash: string): Promise<boolean> {
+    const rows = await writeQuery<{ id: string }>(
+      `MATCH (a:${LABELS[kind]} {id: $id}) SET a.passwordHash = $passwordHash, a.updatedAt = $now RETURN a.id AS id`,
+      { id, passwordHash, now: nowIso() },
     );
-    return rows[0]?.mine === true;
+    return rows.length > 0;
   },
 
-  async releaseBootstrapLock(key: string, token: string): Promise<void> {
-    await writeQuery('MATCH (b:BootstrapLock {id: $key}) WHERE b.owner = $token DELETE b', { key, token });
+  async updateAdminProfile(adminId: string, fullName: string): Promise<boolean> {
+    const rows = await writeQuery<{ id: string }>(
+      'MATCH (a:InstituteAdmin {id: $id}) SET a.fullName = $fullName, a.updatedAt = $now RETURN a.id AS id',
+      { id: adminId, fullName, now: nowIso() },
+    );
+    return rows.length > 0;
+  },
+
+  /** Used by the seeding command and by account recovery. */
+  async findAdminForInstitute(instituteId: string): Promise<AccountRow | null> {
+    const rows = await queryKind('INSTITUTE_ADMIN', 'a.instituteId = $instituteId', { instituteId });
+    return rows[0] ?? null;
   },
 };

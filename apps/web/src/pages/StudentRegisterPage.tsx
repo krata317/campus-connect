@@ -1,12 +1,12 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { AuthUser, InstituteSummary } from '@campusconnect/shared';
 import { studentRegisterSchema } from '@campusconnect/shared';
-import type { AuthUser } from '@campusconnect/shared';
 import { Alert, Spinner } from '@/components/ui/feedback';
 import { Button } from '@/components/ui/button';
-import { Field, Input } from '@/components/ui/form';
-import { CollegeSelect } from '@/components/shared/CollegeSelect';
+import { Field, Input, Select } from '@/components/ui/form';
+import { AuthShell } from '@/components/shared/AuthShell';
 import { api, errorMessage } from '@/lib/api';
 import { applyFieldErrors, resolver } from '@/lib/form';
 import { dashboardPathFor, meQueryKey } from '@/hooks/useAuth';
@@ -16,13 +16,19 @@ type StudentRegisterForm = {
   email: string;
   password: string;
   confirmPassword: string;
-  dateOfBirth: string;
-  collegeSlug: string;
+  instituteId: string;
+  studentCode: string;
 };
 
 export const StudentRegisterPage = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  const institutes = useQuery({
+    queryKey: ['institutes', 'public'],
+    queryFn: () => api.get<{ items: InstituteSummary[] }>('/institutes').then((response) => response.items),
+    staleTime: 60_000,
+  });
 
   const {
     register,
@@ -31,19 +37,24 @@ export const StudentRegisterPage = () => {
     setError,
   } = useForm<StudentRegisterForm>({
     resolver: resolver<StudentRegisterForm>(studentRegisterSchema),
-    defaultValues: { fullName: '', email: '', password: '', confirmPassword: '', dateOfBirth: '', collegeSlug: '' },
+    defaultValues: { fullName: '', email: '', password: '', confirmPassword: '', instituteId: '', studentCode: '' },
   });
 
   const mutation = useMutation({
     mutationFn: (values: StudentRegisterForm) => {
-      const { confirmPassword, ...formValues } = values;
-      const parsed = studentRegisterSchema.parse(formValues);
+      const parsed = studentRegisterSchema.parse({
+        fullName: values.fullName,
+        email: values.email,
+        password: values.password,
+        instituteId: values.instituteId,
+        studentCode: values.studentCode,
+      });
       return api.post<{ user: AuthUser }>('/auth/register/student', {
         fullName: parsed.fullName,
         email: parsed.email,
         password: parsed.password,
-        dateOfBirth: parsed.dateOfBirth ?? null,
-        collegeSlug: parsed.collegeSlug,
+        instituteId: parsed.instituteId,
+        studentCode: parsed.studentCode,
       });
     },
     onSuccess: (data) => {
@@ -51,47 +62,72 @@ export const StudentRegisterPage = () => {
       navigate(dashboardPathFor(data.user.role), { replace: true });
     },
     onError: (error) => {
-      if (!applyFieldErrors(error, setError)) {
-        setError('email', { type: 'server', message: errorMessage(error) });
-      }
+      applyFieldErrors(error, setError);
     },
   });
 
-  const onSubmit = (values: StudentRegisterForm) => {
-    mutation.mutate(values);
-  };
+  const onSubmit = (values: StudentRegisterForm) => mutation.mutate(values);
+  const list = institutes.data ?? [];
 
   return (
-    <div className="mx-auto flex w-full max-w-lg flex-col gap-6 px-4 py-12 sm:px-0">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-semibold">Create your student account</h1>
-        <p className="text-sm text-muted-foreground">
-          Choose your college, then add a name, email and password. You can complete the rest of your profile after signing
-          in.
+    <AuthShell
+      title="Create your student account"
+      subtitle="Ask your placement cell for the institute student code — you need it to register."
+      footer={
+        <p>
+          Already have an account?{' '}
+          <Link to="/login" className="font-medium text-primary hover:underline">
+            Sign in
+          </Link>
         </p>
-      </div>
+      }
+    >
+      <form className="space-y-4" onSubmit={handleSubmit(onSubmit)} noValidate>
+        {mutation.isError ? <Alert tone="error">{errorMessage(mutation.error)}</Alert> : null}
 
-      <form className="space-y-4 rounded-lg border border-border bg-white p-5" onSubmit={handleSubmit(onSubmit)} noValidate>
+        <Field label="Institute" htmlFor="instituteId" error={errors.instituteId?.message} required>
+          {institutes.isLoading ? (
+            <div className="flex h-9 items-center gap-2 rounded-md border border-input bg-card px-3 text-sm text-muted-foreground">
+              <Spinner /> Loading institutes
+            </div>
+          ) : list.length === 0 ? (
+            <Alert tone="warning" title="No institute is registered yet">
+              Your placement cell has to register the institute first.
+            </Alert>
+          ) : (
+            <Select id="instituteId" defaultValue="" required {...register('instituteId')}>
+              <option value="" disabled>
+                Select your institute
+              </option>
+              {list.map((institute) => (
+                <option key={institute.id} value={institute.id}>
+                  {institute.name} · {institute.state}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+
         <Field
-          label="College"
-          htmlFor="collegeSlug"
-          error={errors.collegeSlug?.message}
-          hint="Your account is linked to this college. Only this college's placement cell can see your profile."
+          label="Institute student code"
+          htmlFor="studentCode"
+          error={errors.studentCode?.message}
+          hint="32 characters, shared by your placement cell. Rotating it later does not affect your account."
           required
         >
-          <CollegeSelect id="collegeSlug" {...register('collegeSlug')} />
+          <Input id="studentCode" autoComplete="off" spellCheck={false} className="font-mono" {...register('studentCode')} />
         </Field>
 
         <Field label="Full name" htmlFor="fullName" error={errors.fullName?.message} required>
-          <Input id="fullName" autoComplete="name" placeholder="As printed on your college record" {...register('fullName')} />
+          <Input id="fullName" autoComplete="name" {...register('fullName')} />
         </Field>
 
         <Field label="Email address" htmlFor="email" error={errors.email?.message} required>
-          <Input id="email" type="email" autoComplete="email" placeholder="you@college.edu" {...register('email')} />
+          <Input id="email" type="email" autoComplete="email" {...register('email')} />
         </Field>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Password" htmlFor="password" error={errors.password?.message} hint="At least 8 characters" required>
+          <Field label="Password" htmlFor="password" error={errors.password?.message} required>
             <Input id="password" type="password" autoComplete="new-password" {...register('password')} />
           </Field>
           <Field label="Confirm password" htmlFor="confirmPassword" error={errors.confirmPassword?.message} required>
@@ -99,24 +135,11 @@ export const StudentRegisterPage = () => {
           </Field>
         </div>
 
-        <Field label="Date of birth" htmlFor="dateOfBirth" error={errors.dateOfBirth?.message} hint="Optional — used for placement records">
-          <Input id="dateOfBirth" type="date" {...register('dateOfBirth')} />
-        </Field>
-
-        {mutation.isError ? <Alert tone="error">{errorMessage(mutation.error)}</Alert> : null}
-
         <Button type="submit" className="w-full" disabled={mutation.isPending}>
           {mutation.isPending ? <Spinner /> : null}
           Create account
         </Button>
       </form>
-
-      <p className="text-center text-sm text-muted-foreground">
-        Already registered?{' '}
-        <Link to="/login" className="font-medium text-navy-700 hover:underline">
-          Sign in
-        </Link>
-      </p>
-    </div>
+    </AuthShell>
   );
 };

@@ -6,6 +6,8 @@ export type ErrorCode =
   | 'NOT_FOUND'
   | 'CONFLICT'
   | 'RATE_LIMITED'
+  | 'EMAIL_UNAVAILABLE'
+  | 'GONE'
   | 'INTERNAL_ERROR';
 
 export interface FieldError {
@@ -39,3 +41,9 @@ export const forbidden = (message = 'You do not have access to this resource') =
 export const notFound = (message = 'Resource not found') => new AppError(404, 'NOT_FOUND', message);
 
 export const conflict = (message: string, details?: unknown) => new AppError(409, 'CONFLICT', message, details);
+
+export const gone = (message = 'This link is no longer valid') => new AppError(410, 'GONE', message);
+
+export const emailUnavailable = (message: string) => new AppError(503, 'EMAIL_UNAVAILABLE', message);
+
+export const tooManyRequests = (message: string) => new AppError(429, 'RATE_LIMITED', message);

@@ -4,10 +4,19 @@ import { authService } from '../services/auth.service';
 import { forbidden, unauthorized } from '../lib/errors';
 
 export const requireAuth: RequestHandler = (req: Request, _res: Response, next: NextFunction) => {
-  const { userId, role } = req.session;
+  const { userId, role, expiresAt } = req.session;
 
   if (!userId || !role) {
     next(unauthorized());
+    return;
+  }
+
+  // The session store already refuses to load an expired session, but the
+  // expiry is checked again here so a protected endpoint can never be reached
+  // with a stale cookie even if the store behaviour changes.
+  if (!expiresAt || new Date(expiresAt).getTime() <= Date.now()) {
+    req.session.destroy(() => undefined);
+    next(unauthorized('Your session has expired. Please sign in again.'));
     return;
   }
 
@@ -39,22 +48,6 @@ export const requireRole =
     next();
   };
 
-export const requireApprovedEmployer: RequestHandler = (req: Request, _res: Response, next: NextFunction) => {
-  if (!req.authUser || req.authUser.role !== 'EMPLOYER') {
-    next(forbidden('Only recruiter accounts can access this area'));
-    return;
-  }
-  if (req.authUser.employerApprovalStatus !== 'APPROVED') {
-    next(
-      forbidden(
-        'Your recruiter account is waiting for college approval. You can review your company profile, but hiring requests stay locked until an administrator approves the account.',
-      ),
-    );
-    return;
-  }
-  next();
-};
-
 export const currentUser = (req: Request) => {
   if (!req.authUser) throw unauthorized();
   return req.authUser;
@@ -65,10 +58,10 @@ export const currentUser = (req: Request) => {
  * (reloaded from the graph on each request), never from a header, query
  * parameter or request body.
  */
-export const currentCollegeId = (req: Request): string => {
+export const currentInstituteId = (req: Request): string => {
   const user = currentUser(req);
-  if (!user.college) {
-    throw forbidden('This account is not linked to a college. Ask your placement cell to check the setup.');
+  if (!user.institute) {
+    throw forbidden('This account is not linked to an institute.');
   }
-  return user.college.id;
+  return user.institute.id;
 };

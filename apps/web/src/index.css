@@ -25,6 +25,47 @@
     --border: 214 22% 89%;
     --input: 214 22% 86%;
     --ring: 213 52% 40%;
+
+    /* Surfaces used by the shell and marketing pages. */
+    --surface: 210 30% 99%;
+    --surface-strong: 213 30% 96%;
+    --inverse: 215 40% 12%;
+    --inverse-foreground: 210 30% 96%;
+    --shadow-color: 215 35% 20%;
+  }
+
+  /*
+   * Dark theme: deep blue-grey rather than pure black, so cards, borders and
+   * muted text stay distinguishable from the page background.
+   */
+  .dark {
+    --background: 216 32% 9%;
+    --foreground: 210 25% 93%;
+    --card: 216 28% 12%;
+    --card-foreground: 210 25% 93%;
+    --primary: 210 45% 72%;
+    --primary-foreground: 216 40% 10%;
+    --secondary: 216 22% 18%;
+    --secondary-foreground: 210 22% 90%;
+    --muted: 216 22% 16%;
+    --muted-foreground: 214 16% 66%;
+    --accent: 216 24% 20%;
+    --accent-foreground: 210 25% 92%;
+    --destructive: 0 58% 56%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 152 42% 46%;
+    --success-foreground: 216 40% 10%;
+    --warning: 34 72% 56%;
+    --warning-foreground: 216 40% 10%;
+    --border: 216 20% 22%;
+    --input: 216 20% 26%;
+    --ring: 210 45% 60%;
+
+    --surface: 216 30% 11%;
+    --surface-strong: 216 26% 15%;
+    --inverse: 210 25% 94%;
+    --inverse-foreground: 216 40% 10%;
+    --shadow-color: 220 60% 2%;
   }
 
   * {
@@ -45,12 +86,26 @@
   h2,
   h3,
   h4 {
-    @apply tracking-tight text-navy-900;
+    @apply tracking-tight text-foreground;
+  }
+
+  /* Keyboard focus is always visible, in both themes. */
+  :focus-visible {
+    outline: none;
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.25);
   }
 }
 
 @layer utilities {
   .focus-ring {
     @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+
+  .surface-grid {
+    background-image: radial-gradient(circle at 1px 1px, hsl(var(--border)) 1px, transparent 0);
+    background-size: 22px 22px;
   }
 }

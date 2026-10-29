@@ -26,7 +26,7 @@ export const SkillsForm = ({ profile }: { profile: StudentProfile }) => {
   }, [activeSkills, search]);
 
   const save = useMutation({
-    mutationFn: () => api.put<{ profile: StudentProfile }>('/students/me/skills', { skillIds: selected }),
+    mutationFn: () => api.put<{ profile: StudentProfile }>('/student/me/skills', { skillIds: selected }),
     onSuccess: (data) => {
       queryClient.setQueryData(profileQueryKey, data.profile);
       queryClient.invalidateQueries({ queryKey: ['student'] });
@@ -64,7 +64,7 @@ export const SkillsForm = ({ profile }: { profile: StudentProfile }) => {
         </p>
       </div>
 
-      <div className="max-h-80 overflow-y-auto rounded-md border border-border bg-white p-3">
+      <div className="max-h-80 overflow-y-auto rounded-md border border-border bg-card p-3">
         {visible.length === 0 ? (
           <p className="px-1 py-6 text-center text-sm text-muted-foreground">No skills match “{search}”.</p>
         ) : (
@@ -72,7 +72,7 @@ export const SkillsForm = ({ profile }: { profile: StudentProfile }) => {
             {visible.map((skill) => (
               <label
                 key={skill.id}
-                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-navy-50"
+                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
               >
                 <Checkbox checked={selected.includes(skill.id)} onChange={() => toggle(skill.id)} />
                 <span className="truncate">{skill.name}</span>

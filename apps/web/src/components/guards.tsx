@@ -8,7 +8,7 @@ export const FullPageLoader = () => (
   <div className="flex min-h-screen items-center justify-center bg-background">
     <div className="flex items-center gap-2 text-sm text-muted-foreground">
       <Spinner />
-      Loading CampusConnect
+      Loading Campus Connect
     </div>
   </div>
 );

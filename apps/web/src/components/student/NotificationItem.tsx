@@ -17,29 +17,29 @@ export const NotificationItem = ({
   const unread = !notification.readAt;
 
   return (
-    <article className={cn('rounded-lg border bg-white p-4', unread ? 'border-navy-300 shadow-card' : 'border-border')}>
+    <article className={cn('rounded-lg border bg-card p-4', unread ? 'border-navy-300 shadow-card' : 'border-border')}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-sm font-semibold text-navy-900">{notification.title}</h3>
+            <h3 className="text-sm font-semibold text-foreground">{notification.title}</h3>
             {unread ? <Badge variant="warning">Unread</Badge> : <Badge variant="outline">Read</Badge>}
           </div>
           <p className="text-xs text-muted-foreground">
-            {notification.companyName} · {notification.roleTitle} · {formatDateTime(notification.createdAt)}
+            {notification.recruiterName} · {notification.roleTitle} · {formatDateTime(notification.createdAt)}
           </p>
         </div>
         <a
           href={notification.registrationUrl}
           target="_blank"
           rel="noreferrer noopener"
-          className="inline-flex items-center gap-1.5 rounded-md border border-input bg-white px-3 py-1.5 text-xs font-medium text-navy-800 hover:bg-navy-50"
+          className="inline-flex items-center gap-1.5 rounded-md border border-input bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
         >
           Registration link
           <ExternalLink className="h-3 w-3" />
         </a>
       </div>
 
-      <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-navy-700">{notification.message}</p>
+      <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-foreground">{notification.message}</p>
 
       {unread && onMarkRead ? (
         <div className="mt-3">

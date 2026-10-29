@@ -21,7 +21,9 @@ export const ensureCsrfToken: RequestHandler = (req: Request, res: Response, nex
     return;
   }
   const token = randomBytes(32).toString('hex');
-  res.cookie(CSRF_COOKIE, token, { ...cookieOptions, maxAge: env.sessionTtlMs });
+  // The CSRF token is a double-submit value, not a session: it is kept for the
+  // longest possible session so it does not churn during a "Remember me" login.
+  res.cookie(CSRF_COOKIE, token, { ...cookieOptions, maxAge: env.sessionRememberTtlMs });
   res.locals.csrfToken = token;
   next();
 };

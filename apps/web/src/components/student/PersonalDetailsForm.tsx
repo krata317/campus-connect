@@ -56,7 +56,7 @@ export const PersonalDetailsForm = ({ profile }: { profile: StudentProfile }) =>
   const mutation = useMutation({
     mutationFn: (values: ProfileFormValues) => {
       const parsed = profileUpdateSchema.parse(values);
-      return api.put<{ profile: StudentProfile }>('/students/me/profile', parsed);
+      return api.put<{ profile: StudentProfile }>('/student/me/profile', parsed);
     },
     onSuccess: (data) => {
       queryClient.setQueryData(profileQueryKey, data.profile);
@@ -100,7 +100,7 @@ export const PersonalDetailsForm = ({ profile }: { profile: StudentProfile }) =>
       </div>
 
       <div className="border-t border-border pt-4">
-        <h3 className="text-sm font-semibold text-navy-900">External links</h3>
+        <h3 className="text-sm font-semibold text-foreground">External links</h3>
         <p className="text-xs text-muted-foreground">Full URLs only, including https://</p>
       </div>
 
@@ -117,7 +117,7 @@ export const PersonalDetailsForm = ({ profile }: { profile: StudentProfile }) =>
       </div>
 
       <div className="border-t border-border pt-4">
-        <h3 className="text-sm font-semibold text-navy-900">Placement eligibility</h3>
+        <h3 className="text-sm font-semibold text-foreground">Placement eligibility</h3>
         <p className="text-xs text-muted-foreground">
           Enter 0 if you have no active backlogs. Leaving this empty means "not reported", which can make you ineligible for
           roles that check backlogs.

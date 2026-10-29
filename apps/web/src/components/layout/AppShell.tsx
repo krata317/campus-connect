@@ -1,13 +1,12 @@
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Link, NavLink } from 'react-router-dom';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
-import { LogOut, ShieldCheck } from 'lucide-react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
-import { cn } from '@/lib/utils';
-import { meQueryKey, useCurrentUser } from '@/hooks/useAuth';
-import { Button } from '@/components/ui/button';
+import { LogOut, Menu, Settings, ShieldCheck, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
+import { useCurrentUser, useLogout } from '@/hooks/useAuth';
+import { cn } from '@/lib/utils';
 
 export interface NavItem {
   to: string;
@@ -15,6 +14,21 @@ export interface NavItem {
   icon: LucideIcon;
   end?: boolean;
 }
+
+const navLinkClass = ({ isActive }: { isActive: boolean }) =>
+  cn(
+    'flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-navy-900',
+    isActive
+      ? 'bg-white/12 text-white'
+      : 'text-navy-200/80 hover:bg-white/8 hover:text-white dark:text-muted-foreground dark:hover:bg-white/5 dark:hover:text-foreground',
+  );
+
+const settingsPath = (role: string | undefined): string => {
+  if (role === 'STUDENT') return '/student/settings';
+  if (role === 'RECRUITER') return '/recruiter/settings';
+  return '/institute/settings';
+};
 
 export const AppShell = ({
   roleLabel,
@@ -26,98 +40,112 @@ export const AppShell = ({
   children: ReactNode;
 }) => {
   const { user } = useCurrentUser();
-  const queryClient = useQueryClient();
+  const logout = useLogout();
+  const location = useLocation();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
-  const logout = useMutation({
-    mutationFn: () => api.post<void>('/auth/logout'),
-    onSuccess: () => {
-      queryClient.clear();
-      queryClient.setQueryData(meQueryKey, null);
-      window.location.assign('/login');
-    },
-  });
+  // Close the mobile drawer whenever the route changes.
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
+
+  const subtitle = user?.institute?.name ?? user?.displayName ?? roleLabel;
+
+  const nav = (
+    <nav className="flex flex-1 flex-col gap-1 px-3">
+      {navItems.map((item) => (
+        <NavLink key={item.to} to={item.to} end={item.end} className={navLinkClass}>
+          <item.icon className="h-4 w-4 shrink-0" />
+          <span className="truncate">{item.label}</span>
+        </NavLink>
+      ))}
+    </nav>
+  );
 
   return (
-    <div className="min-h-screen bg-background">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-navy-800 bg-navy-900 lg:flex">
-        <div className="flex items-center gap-2.5 px-5 py-5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-navy-100 text-navy-900">
+    <div className="min-h-full bg-background">
+      {/* Desktop sidebar */}
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-navy-800 bg-navy-900 dark:border-border dark:bg-card lg:flex">
+        <Link to="/" className="flex items-center gap-2.5 px-5 py-5 focus-visible:outline-none">
+          <span className="flex h-8 w-8 items-center justify-center rounded-md bg-white/10 text-white">
             <ShieldCheck className="h-4 w-4" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-white">CampusConnect</p>
-            <p className="truncate text-xs text-navy-300">{user?.college?.name ?? roleLabel}</p>
-          </div>
-        </div>
-
-        <nav className="flex-1 space-y-1 px-3 py-2">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors',
-                  isActive ? 'bg-navy-800 text-white' : 'text-navy-200 hover:bg-navy-800/60 hover:text-white',
-                )
-              }
-            >
-              <item.icon className="h-4 w-4" />
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
-
-        <div className="border-t border-navy-800 px-4 py-4">
-          <p className="truncate text-sm font-medium text-white">{user?.displayName}</p>
-          <p className="truncate text-xs text-navy-300">{user?.email}</p>
-          <button
-            type="button"
-            onClick={() => logout.mutate()}
-            className="mt-3 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-navy-200 transition-colors hover:bg-navy-800 hover:text-white"
-          >
-            <LogOut className="h-4 w-4" />
-            Sign out
-          </button>
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold text-white">Campus Connect</span>
+            <span className="block truncate text-xs text-navy-300 dark:text-muted-foreground">{roleLabel}</span>
+          </span>
+        </Link>
+        {nav}
+        <div className="border-t border-navy-800 px-3 py-3 dark:border-border">
+          <NavLink to={settingsPath(user?.role)} className={navLinkClass}>
+            <Settings className="h-4 w-4 shrink-0" />
+            Settings
+          </NavLink>
         </div>
       </aside>
 
-      <div className="lg:pl-64">
-        <header className="sticky top-0 z-20 border-b border-border bg-white/95 backdrop-blur">
-          <div className="flex h-14 items-center justify-between gap-4 px-4 sm:px-6">
-            <Link to="/" className="flex items-center gap-2 lg:hidden">
-              <ShieldCheck className="h-5 w-5 text-navy-800" />
-              <span className="text-sm font-semibold text-navy-900">CampusConnect</span>
-            </Link>
-            <div className="hidden min-w-0 items-center gap-2 lg:flex">
-              <Badge variant="info">{roleLabel}</Badge>
-              {user?.college ? <span className="truncate text-sm font-medium text-navy-800">{user.college.name}</span> : null}
+      {/* Mobile drawer */}
+      {mobileOpen ? (
+        <div className="fixed inset-0 z-40 lg:hidden">
+          <button
+            type="button"
+            aria-label="Close navigation"
+            className="absolute inset-0 bg-foreground/40"
+            onClick={() => setMobileOpen(false)}
+          />
+          <div className="absolute inset-y-0 left-0 flex w-72 flex-col bg-navy-900 dark:bg-card">
+            <div className="flex items-center justify-between px-5 py-4">
+              <span className="text-sm font-semibold text-white">Campus Connect</span>
+              <button
+                type="button"
+                onClick={() => setMobileOpen(false)}
+                aria-label="Close navigation"
+                className="rounded-md p-1.5 text-navy-200 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
-            <div className="flex items-center gap-3">
-              <span className="hidden text-sm text-muted-foreground sm:inline">{user?.displayName}</span>
-              <Button variant="outline" size="sm" onClick={() => logout.mutate()} className="lg:hidden">
-                <LogOut className="h-3.5 w-3.5" />
-                Sign out
-              </Button>
+            {nav}
+            <div className="border-t border-navy-800 px-3 py-3 dark:border-border">
+              <NavLink to={settingsPath(user?.role)} className={navLinkClass}>
+                <Settings className="h-4 w-4 shrink-0" />
+                Settings
+              </NavLink>
             </div>
           </div>
-          <div className="flex gap-1 overflow-x-auto border-t border-border px-3 py-2 lg:hidden">
-            {navItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.end}
-                className={({ isActive }) =>
-                  cn(
-                    'whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-                    isActive ? 'bg-navy-800 text-white' : 'text-navy-600 hover:bg-navy-50',
-                  )
-                }
-              >
-                {item.label}
-              </NavLink>
-            ))}
+        </div>
+      ) : null}
+
+      <div className="lg:pl-64">
+        <header className="sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur">
+          <div className="flex h-14 items-center gap-3 px-4 sm:px-6">
+            <button
+              type="button"
+              onClick={() => setMobileOpen(true)}
+              aria-label="Open navigation"
+              className="rounded-md border border-border p-2 text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
+            >
+              <Menu className="h-4 w-4" />
+            </button>
+
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-foreground">{subtitle}</p>
+            </div>
+
+            <div className="hidden items-center gap-2 sm:flex">
+              <Badge variant="outline">{roleLabel}</Badge>
+            </div>
+
+            <ThemeToggle />
+
+            <button
+              type="button"
+              onClick={() => logout.mutate()}
+              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <LogOut className="h-4 w-4" />
+              <span className="hidden sm:inline">Sign out</span>
+            </button>
           </div>
         </header>
 
