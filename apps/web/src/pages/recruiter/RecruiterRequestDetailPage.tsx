@@ -26,14 +26,14 @@ export const RecruiterRequestDetailPage = () => {
   const submit = useMutation({
     mutationFn: () => api.post<{ request: HiringRequest }>(`/recruiter/requests/${id}/submit`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['employer'] });
+      queryClient.invalidateQueries({ queryKey: ['recruiter'] });
     },
   });
 
   const remove = useMutation({
     mutationFn: () => api.delete<void>(`/recruiter/requests/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['employer'] });
+      queryClient.invalidateQueries({ queryKey: ['recruiter'] });
       navigate('/recruiter/requests', { replace: true });
     },
   });

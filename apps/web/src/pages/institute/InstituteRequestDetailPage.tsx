@@ -33,7 +33,7 @@ export const InstituteRequestDetailPage = () => {
     mutationFn: (input: { action: ReviewAction; note: string | null }) =>
       api.post<{ request: HiringRequest }>(`/institute/requests/${id}/review`, input),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin'] });
+      queryClient.invalidateQueries({ queryKey: ['institute'] });
       setAction(null);
       setNote('');
     },
@@ -163,13 +163,20 @@ export const InstituteRequestDetailPage = () => {
                     {role.registrationUrl}
                   </a>
                   {role.dispatchedAt ? <p className="text-xs text-muted-foreground">Dispatched {formatDateTime(role.dispatchedAt)}</p> : null}
-                  <Link
-                    to={`/institute/roles/${role.id}`}
-                    className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), data.status !== 'APPROVED' ? 'pointer-events-none opacity-50' : '')}
-                  >
-                    <Users className="h-3.5 w-3.5" />
-                    Students & shortlist
-                  </Link>
+                  {data.status === 'APPROVED' ? (
+                    <Link to={`/institute/roles/${role.id}`} className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}>
+                      <Users className="h-3.5 w-3.5" />
+                      Students & shortlist
+                    </Link>
+                  ) : (
+                    // A disabled button rather than a Link with pointer-events
+                    // disabled: the link stayed focusable and could still be
+                    // opened with the keyboard.
+                    <Button variant="outline" size="sm" disabled>
+                      <Users className="h-3.5 w-3.5" />
+                      Students & shortlist
+                    </Button>
+                  )}
                   {data.status !== 'APPROVED' ? (
                     <p className="text-xs text-muted-foreground">Approve the request to enable student filtering.</p>
                   ) : null}
@@ -194,8 +201,8 @@ export const InstituteRequestDetailPage = () => {
           title={action === 'APPROVE' ? 'Approve hiring request' : action === 'REJECT' ? 'Reject hiring request' : 'Request changes'}
           description={
             action === 'APPROVE'
-              ? 'The employer will see the request as approved and you can start shortlisting.'
-              : 'Your note is shown to the employer and stored in the review history.'
+              ? 'The recruiter will see the request as approved and you can start shortlisting.'
+              : 'Your note is shown to the recruiter and stored in the review history.'
           }
         >
           <div className="space-y-4">

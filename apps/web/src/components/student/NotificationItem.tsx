@@ -17,7 +17,7 @@ export const NotificationItem = ({
   const unread = !notification.readAt;
 
   return (
-    <article className={cn('rounded-lg border bg-card p-4', unread ? 'border-navy-300 shadow-card' : 'border-border')}>
+    <article className={cn('rounded-lg border bg-card p-4', unread ? 'border-primary/40 shadow-card' : 'border-border')}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">

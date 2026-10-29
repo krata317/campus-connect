@@ -56,7 +56,7 @@ export const InstituteRequestsPage = () => {
               onClick={() => setStatus(filter.value)}
               className={
                 status === filter.value
-                  ? 'whitespace-nowrap rounded-md bg-navy-900 px-3 py-1.5 text-sm font-medium text-white'
+                  ? 'whitespace-nowrap rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground'
                   : 'whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted'
               }
             >
@@ -89,8 +89,19 @@ export const InstituteRequestsPage = () => {
           <CardContent>
             <EmptyState
               icon={<ClipboardCheck className="h-6 w-6" />}
-              title="No requests in this view"
-              description="Requests appear here once an approved recruiter submits them."
+              title={status === 'SUBMITTED' ? 'Nothing is waiting for review' : 'No requests in this view'}
+              description={
+                status === 'SUBMITTED'
+                  ? 'Approved requests move to the Approved tab, where you can open a role and shortlist students.'
+                  : 'Requests appear here once an approved recruiter submits them.'
+              }
+              action={
+                status === 'SUBMITTED' ? (
+                  <Button variant="outline" size="sm" onClick={() => setStatus('APPROVED')}>
+                    View approved requests
+                  </Button>
+                ) : undefined
+              }
             />
           </CardContent>
         </Card>
@@ -100,7 +111,7 @@ export const InstituteRequestsPage = () => {
             <THead>
               <TR>
                 <TH>Request</TH>
-                <TH>Company</TH>
+                <TH>Recruiter</TH>
                 <TH>Roles</TH>
                 <TH>Status</TH>
                 <TH>Submitted</TH>

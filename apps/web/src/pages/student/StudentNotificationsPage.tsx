@@ -61,7 +61,7 @@ export const StudentNotificationsPage = () => {
             onClick={() => setFilter(value)}
             className={
               filter === value
-                ? 'rounded-md bg-navy-900 px-3 py-1.5 text-sm font-medium text-white'
+                ? 'rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground'
                 : 'rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted'
             }
           >

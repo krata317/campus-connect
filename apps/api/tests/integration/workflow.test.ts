@@ -150,6 +150,26 @@ describeDb('hiring request pipeline', () => {
     expect(weak?.checks.find((check) => check.key === 'undergradScore')?.status).toBe('FAIL');
   });
 
+  it('returns the recruiter and request context the shortlist page renders', async () => {
+    // The institute shortlist page crashed to a blank screen because the API
+    // sends `recruiter` while the page read `company`. This pins the contract.
+    const pipeline = await buildPipeline();
+
+    const response = await pipeline.institute.client.get(`/api/institute/roles/${pipeline.roleId}/candidates`);
+    expect(response.status).toBe(200);
+
+    expect(response.body.recruiter).toEqual({
+      id: pipeline.recruiter.recruiterId,
+      name: pipeline.recruiter.companyName,
+    });
+    expect(response.body).not.toHaveProperty('company');
+    expect(response.body.request).toMatchObject({ id: pipeline.requestId, status: 'APPROVED' });
+    expect(response.body.role.id).toBe(pipeline.roleId);
+    expect(typeof response.body.totalStudents).toBe('number');
+    expect(typeof response.body.eligibleCount).toBe('number');
+    expect(Array.isArray(response.body.candidates)).toBe(true);
+  });
+
   it('shortlists without notifying, then dispatches with a notification', async () => {
     const pipeline = await buildPipeline();
 

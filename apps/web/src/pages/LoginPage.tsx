@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { AuthUser, Role } from '@campusconnect/shared';
@@ -29,6 +29,7 @@ export const LoginPage = () => {
   const queryClient = useQueryClient();
   const [params] = useSearchParams();
   const expired = params.get('expired') === '1';
+  const location = useLocation();
 
   const {
     register,
@@ -50,7 +51,13 @@ export const LoginPage = () => {
       }),
     onSuccess: (data) => {
       queryClient.setQueryData(meQueryKey, data.user);
-      navigate(dashboardPathFor(data.user.role), { replace: true });
+      // Return the visitor to the page that sent them here, but only when that
+      // page belongs to the portal they just signed into — otherwise a student
+      // would land on /unauthorized after following an institute link.
+      const home = dashboardPathFor(data.user.role);
+      const intended = (location.state as { from?: string } | null)?.from;
+      const destination = intended && (intended === home || intended.startsWith(`${home}/`)) ? intended : home;
+      navigate(destination, { replace: true });
     },
     onError: (error) => {
       if (!applyFieldErrors(error, setError)) {

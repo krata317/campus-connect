@@ -81,7 +81,7 @@ export const PageHeader = ({
 );
 
 export const ErrorState = ({ message, onRetry }: { message: string; onRetry?: () => void }) => (
-  <div className="rounded-md border border-red-200 bg-destructive/10 px-4 py-3 text-sm text-red-900">
+  <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
     <p>{message}</p>
     {onRetry ? (
       <button type="button" onClick={onRetry} className="mt-2 font-medium underline underline-offset-2">

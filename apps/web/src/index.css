@@ -25,13 +25,6 @@
     --border: 214 22% 89%;
     --input: 214 22% 86%;
     --ring: 213 52% 40%;
-
-    /* Surfaces used by the shell and marketing pages. */
-    --surface: 210 30% 99%;
-    --surface-strong: 213 30% 96%;
-    --inverse: 215 40% 12%;
-    --inverse-foreground: 210 30% 96%;
-    --shadow-color: 215 35% 20%;
   }
 
   /*
@@ -60,12 +53,6 @@
     --border: 216 20% 22%;
     --input: 216 20% 26%;
     --ring: 210 45% 60%;
-
-    --surface: 216 30% 11%;
-    --surface-strong: 216 26% 15%;
-    --inverse: 210 25% 94%;
-    --inverse-foreground: 216 40% 10%;
-    --shadow-color: 220 60% 2%;
   }
 
   * {
@@ -100,10 +87,6 @@
 }
 
 @layer utilities {
-  .focus-ring {
-    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
-  }
-
   .surface-grid {
     background-image: radial-gradient(circle at 1px 1px, hsl(var(--border)) 1px, transparent 0);
     background-size: 22px 22px;

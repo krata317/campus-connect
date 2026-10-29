@@ -24,7 +24,7 @@ export const ReviewHistory = ({ events }: { events: ReviewEvent[] }) => {
           <p className="text-sm font-medium text-foreground">{actionLabel(event.action)}</p>
           <p className="text-xs text-muted-foreground">
             {event.fromStatus ? `${statusLabel(event.fromStatus)} → ` : ''}
-            {statusLabel(event.toStatus)} · {event.actorRole === 'INSTITUTE_ADMIN' ? 'Placement cell' : 'Employer'} ·{' '}
+            {statusLabel(event.toStatus)} · {event.actorRole === 'INSTITUTE_ADMIN' ? 'Placement cell' : 'Recruiter'} ·{' '}
             {formatDateTime(event.at)}
           </p>
           {event.note ? <p className="mt-1 text-sm text-foreground">{event.note}</p> : null}

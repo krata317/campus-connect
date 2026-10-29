@@ -17,7 +17,10 @@ import { cn, formatMonths, scoreText } from '@/lib/utils';
 interface CandidateResponse {
   role: JobRole;
   request: { id: string; title: string; status: string; assessmentInstructions: string | null };
-  company: { id: string; name: string };
+  // The API returns the recruiter who sent the request. It used to be called
+  // `company`, which left this page reading an undefined field and rendering
+  // nothing at all.
+  recruiter: { id: string; name: string };
   candidates: CandidateEvaluation[];
   totalStudents: number;
   eligibleCount: number;
@@ -75,14 +78,14 @@ export const InstituteRoleCandidatesPage = () => {
   const saveShortlist = useMutation({
     mutationFn: () => api.put<{ count: number }>(`/institute/roles/${roleId}/shortlist`, { studentIds: selected }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin'] });
+      queryClient.invalidateQueries({ queryKey: ['institute'] });
     },
   });
 
   const dispatch = useMutation({
     mutationFn: () => api.post<{ dispatched: number }>(`/institute/roles/${roleId}/dispatch`, { studentIds: selected, message: message.trim() || null }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin'] });
+      queryClient.invalidateQueries({ queryKey: ['institute'] });
       setDispatchOpen(false);
       setMessage('');
     },
@@ -117,7 +120,7 @@ export const InstituteRoleCandidatesPage = () => {
     <div className="space-y-5">
       <PageHeader
         title={data.role.title}
-        description={`${data.company.name} · ${data.request.title}`}
+        description={`${data.recruiter.name} · ${data.request.title}`}
         actions={
           <Link to={`/institute/requests/${data.request.id}`} className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}>
             <ArrowLeft className="h-3.5 w-3.5" />
@@ -294,7 +297,11 @@ export const InstituteRoleCandidatesPage = () => {
           ) : null}
 
           {saveShortlist.isError ? <Alert tone="error">{errorMessage(saveShortlist.error)}</Alert> : null}
-          {saveShortlist.isSuccess ? <Alert tone="success">Shortlist saved. Nothing has been sent to students yet.</Alert> : null}
+          {/* Once the dispatch succeeds the "nothing has been sent yet" note is
+              no longer true, so it is dropped instead of stacking under it. */}
+          {saveShortlist.isSuccess && !dispatch.isSuccess ? (
+            <Alert tone="success">Shortlist saved. Nothing has been sent to students yet.</Alert>
+          ) : null}
           {dispatch.isError ? <Alert tone="error">{errorMessage(dispatch.error)}</Alert> : null}
           {dispatch.isSuccess ? <Alert tone="success">Notifications created for the selected students.</Alert> : null}
 

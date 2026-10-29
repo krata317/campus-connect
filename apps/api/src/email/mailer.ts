@@ -52,14 +52,6 @@ export function clearOutbox(): void {
   outbox.length = 0;
 }
 
-export function findLastMessageTo(email: string): OutboundMessage | undefined {
-  const target = email.toLowerCase();
-  for (let index = outbox.length - 1; index >= 0; index -= 1) {
-    if (outbox[index]!.to.toLowerCase() === target) return outbox[index];
-  }
-  return undefined;
-}
-
 /**
  * Sends one message. Throws when delivery fails so the caller can tell the user
  * the truth instead of reporting a success that never happened.

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
+import { passwordSchema } from '@campusconnect/shared';
 import { Alert, Spinner } from '@/components/ui/feedback';
 import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/form';
@@ -46,6 +47,9 @@ export const ResetPasswordPage = () => {
   }
 
   const mismatch = confirm.length > 0 && confirm !== password;
+  // The same rule the API applies, so the message never disagrees with the server.
+  const passwordCheck = passwordSchema.safeParse(password);
+  const passwordError = password.length > 0 && !passwordCheck.success ? passwordCheck.error.issues[0]?.message : undefined;
 
   return (
     <AuthShell title="Choose a new password" subtitle="At least 8 characters.">
@@ -59,7 +63,7 @@ export const ResetPasswordPage = () => {
       >
         {complete.isError ? <Alert tone="error">{errorMessage(complete.error)}</Alert> : null}
 
-        <Field label="New password" htmlFor="password" required>
+        <Field label="New password" htmlFor="password" error={passwordError} required>
           <Input
             id="password"
             type="password"
@@ -80,7 +84,7 @@ export const ResetPasswordPage = () => {
           />
         </Field>
 
-        <Button type="submit" className="w-full" disabled={complete.isPending || password.length < 8 || mismatch}>
+        <Button type="submit" className="w-full" disabled={complete.isPending || !passwordCheck.success || mismatch}>
           {complete.isPending ? <Spinner /> : null}
           Update password
         </Button>
