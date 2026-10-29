@@ -2,6 +2,7 @@ import { env } from '../config/env';
 import { logger } from '../lib/logger';
 import { sendMail } from '../email/mailer';
 import {
+  accountDeletedEmail,
   hiringRequestInstituteEmail,
   hiringRequestRecruiterEmail,
   instituteWelcomeEmail,
@@ -85,6 +86,23 @@ export const emailService = {
 
   async sendPasswordReset(to: string, link: string): Promise<void> {
     await deliver(to, passwordResetEmail({ link, expiresInMinutes: Math.round(env.passwordResetTtlMs / 60000) }));
+  },
+
+  /**
+   * The goodbye message. Mandatory and failure-propagating: the deletion flow
+   * calls this before touching the database, so a delivery failure aborts the
+   * deletion instead of leaving an account removed without a record of it.
+   */
+  async sendAccountDeleted(params: {
+    to: string;
+    roleLabel: string;
+    email: string;
+    removedStudents: number;
+  }): Promise<void> {
+    await deliver(
+      params.to,
+      accountDeletedEmail({ roleLabel: params.roleLabel, email: params.email, removedStudents: params.removedStudents }),
+    );
   },
 
   async notifyInstituteNewRequest(params: {

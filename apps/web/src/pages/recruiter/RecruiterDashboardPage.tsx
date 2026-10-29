@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Building2, ClipboardList, Plus } from 'lucide-react';
 import type { HiringRequest, RecruiterProfile } from '@campusconnect/shared';
 import { api, errorMessage } from '@/lib/api';
+import { DeletedNotice } from '@/components/shared/DeletedNotice';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -114,7 +115,7 @@ export const RecruiterDashboardPage = () => {
                   {list.slice(0, 6).map((request) => (
                     <TR key={request.id}>
                       <TD className="font-medium">{request.title}</TD>
-                      <TD className="text-muted-foreground">{request.instituteName}</TD>
+                      <TD className="text-muted-foreground">{request.instituteDeleted ? <DeletedNotice kind="INSTITUTE" /> : request.instituteName}</TD>
                       <TD>{request.roles.length}</TD>
                       <TD>
                         <Badge variant={statusTone(request.status)}>{statusLabel(request.status)}</Badge>

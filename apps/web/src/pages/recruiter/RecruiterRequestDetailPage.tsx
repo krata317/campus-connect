@@ -1,6 +1,7 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Pencil, Send, Trash2 } from 'lucide-react';
+import { DELETED_ACCOUNT_NOTICE } from '@campusconnect/shared';
 import type { HiringRequest } from '@campusconnect/shared';
 import { api, errorMessage } from '@/lib/api';
 import { useSkillCatalogue } from '@/hooks/useStudent';
@@ -42,13 +43,14 @@ export const RecruiterRequestDetailPage = () => {
   if (request.isError) return <ErrorState message={errorMessage(request.error)} onRetry={() => request.refetch()} />;
 
   const data = request.data as HiringRequest;
-  const editable = data.status === 'DRAFT' || data.status === 'CHANGES_REQUESTED';
+  // A request addressed to a deleted institute is history: it can be read but not changed.
+  const editable = !data.instituteDeleted && (data.status === 'DRAFT' || data.status === 'CHANGES_REQUESTED');
 
   return (
     <div className="space-y-5">
       <PageHeader
         title={data.title}
-        description={`${data.recruiterName} · created ${formatDateTime(data.createdAt)}`}
+        description={`${data.recruiterName ?? 'You'} · created ${formatDateTime(data.createdAt)}`}
         actions={
           <>
             <Link to="/recruiter/requests" className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}>
@@ -91,6 +93,12 @@ export const RecruiterRequestDetailPage = () => {
           Submitted {formatDateTime(data.submittedAt)} · Reviewed {formatDateTime(data.reviewedAt)}
         </span>
       </div>
+
+      {data.instituteDeleted ? (
+        <Alert tone="info" title="Read-only history">
+          {DELETED_ACCOUNT_NOTICE.INSTITUTE} This request stays in your records but can no longer be edited or submitted.
+        </Alert>
+      ) : null}
 
       {data.reviewNote ? (
         <Alert tone={data.status === 'REJECTED' ? 'error' : 'warning'} title={data.status === 'REJECTED' ? 'Rejection note' : 'Note from the placement cell'}>

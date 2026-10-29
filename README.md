@@ -153,23 +153,49 @@ delivered, because registration and password recovery cannot work without them.
 
 ---
 
+## Deleting your account
+
+Every account has a **Delete account** section on its settings page. It lists
+what will be removed for that account type, and asks for your password plus a
+typed `DELETE` before anything happens. There is no waiting period and no
+recovery.
+
+- **Student** — the account, profile, education, experience and notifications are
+  deleted immediately and you disappear from your institute's student list. Any
+  shortlist you were part of stays in the institute's history, marked
+  “This student no longer exists on the platform.”, with no personal details.
+- **Recruiter** — the account and company profile are deleted. Hiring requests you
+  already sent stay with the institutes you sent them to, but they become
+  read-only and show “This recruiter no longer exists on the platform.”
+- **Institute administrator** — the institute, its administrator login and every
+  student account belonging to it are deleted. Recruiters keep the requests they
+  sent as read-only history, shown as “This institute no longer exists on the
+  platform.”
+
+A confirmation email is sent before anything is removed: if it cannot be
+delivered, the deletion is cancelled and your account is left exactly as it was.
+Every session for the account is invalidated, so no browser or tab stays signed
+in.
+
+---
+
 ## Using the app
 
 **Students** — *Overview* summarises your profile completeness and recent
 activity; *My profile* holds personal details, education, experience and skills;
 *Notifications* lists shortlist and dispatch updates; *Settings* holds your email
-preference.
+preference and the delete-account option.
 
 **Recruiters** — *Overview* shows request counts by status; *Company profile*
 holds company details; *Hiring requests* lists every request you have sent, with
 a detail page for each role and its review history; *Settings* holds your email
-preference.
+preference and the delete-account option.
 
 **Institute administrators** — *Overview* shows pending requests and the student
 verification code; *Students* lists your students with eligibility detail;
 *Skills* manages the catalogue students choose from; *Hiring requests* is the
 review queue; *Dispatches* shows what has been sent; *Settings* holds your email
-preference.
+preference and the delete-account option.
 
 The interface has a light and a dark theme. Light is the default; the toggle in
 the header remembers your choice and applies it before the page paints, so there
@@ -191,6 +217,45 @@ is no flash of the wrong theme.
 - Email notifications with a saved preference for each account type.
 - Forgot-password flow for all three account types.
 - 10-minute sessions by default, 7 days with **Remember me**.
+- Self-service account deletion for all three account types, with password
+  confirmation, immediate removal, and read-only historical records that show
+  “This student / recruiter / institute no longer exists on the platform.”
+
+---
+
+## Coming features
+
+These are planned for future releases. **None of them are available yet** — they
+are listed here so you know what is being worked on, not as a description of
+current behaviour.
+
+### Enhanced frontend experience
+A more refined interface across the product: smoother page transitions, tasteful
+motion on lists and dialogs, and a closer pass on spacing and typography at
+smaller screen sizes.
+
+### Campus Connect branding
+A dedicated logo, a documented colour and type scale, and a consistent visual
+identity across the app, emails and browser icons, replacing the current
+text-only wordmark.
+
+### Account deletion and recovery
+Deletion is immediate today, with no way back. A future release will add a short
+recovery window: the account is deactivated straight away and removed
+permanently after a set period, giving people a chance to change their mind
+before their data is gone for good.
+
+### Data export
+The ability to download your own data — profile and education for students,
+company profile and requests for recruiters, students and hiring history for
+institutes — in a readable format, before or instead of deleting the account.
+
+### Institute-led student verification
+Today a student joins an institute by entering the institute's shared 32-character
+code. A future release will replace that with institute-controlled verification:
+the student registers, the institute reviews and approves the request, and the
+shared code is retired. Until then the existing student code keeps working
+exactly as described above.
 
 ---
 

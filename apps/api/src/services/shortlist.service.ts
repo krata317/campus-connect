@@ -11,7 +11,9 @@ import { logger } from '../lib/logger';
 export interface CandidateListResult {
   role: JobRole;
   request: { id: string; title: string; status: string; assessmentInstructions: string | null };
-  recruiter: { id: string; name: string };
+  recruiter: { id: string; name: string | null };
+  /** True when the recruiter deleted their account; shortlisting is then locked. */
+  recruiterDeleted: boolean;
   candidates: CandidateEvaluation[];
   totalStudents: number;
   eligibleCount: number;
@@ -75,6 +77,7 @@ export const shortlistService = {
         assessmentInstructions: context.request.assessmentInstructions,
       },
       recruiter: context.recruiter,
+      recruiterDeleted: context.recruiterDeleted,
       candidates: filtered,
       totalStudents: students.length,
       eligibleCount,
@@ -84,10 +87,17 @@ export const shortlistService = {
 
   async saveShortlist(roleId: string, instituteId: string, studentIds: string[], adminId: string) {
     const context = await this.getRoleContext(roleId, instituteId);
+    if (context.recruiterDeleted) {
+      throw conflict('This recruiter no longer exists on the platform, so the role is read-only.');
+    }
     if (context.request.status !== 'APPROVED') {
       throw conflict('Only approved hiring requests can be shortlisted');
     }
-    const unique = [...new Set(studentIds)];
+    const requested = [...new Set(studentIds)];
+    // Students who deleted their account cannot be shortlisted again; they are
+    // dropped here rather than failing the whole save with a confusing error.
+    const deleted = await shortlistRepository.findDeletedStudentIds(requested, instituteId);
+    const unique = requested.filter((id) => !deleted.includes(id));
     const saved = await shortlistRepository.replaceShortlist(roleId, instituteId, unique, adminId);
     if (saved !== unique.length) {
       throw badRequest('One or more selected students are not part of this institute');
@@ -97,6 +107,9 @@ export const shortlistService = {
 
   async dispatch(input: { roleId: string; instituteId: string; studentIds: string[]; adminId: string; message: string | null }) {
     const context = await this.getRoleContext(input.roleId, input.instituteId);
+    if (context.recruiterDeleted) {
+      throw conflict('This recruiter no longer exists on the platform, so the role is read-only.');
+    }
     if (context.request.status !== 'APPROVED') {
       throw conflict('Only approved hiring requests can be dispatched');
     }
@@ -104,7 +117,9 @@ export const shortlistService = {
       throw conflict('This role has already been dispatched. Notifications were not sent again.');
     }
 
-    const unique = [...new Set(input.studentIds)];
+    const requested = [...new Set(input.studentIds)];
+    const deleted = await shortlistRepository.findDeletedStudentIds(requested, input.instituteId);
+    const unique = requested.filter((id) => !deleted.includes(id));
     if (unique.length === 0) {
       throw badRequest('Select at least one student to notify');
     }
@@ -134,7 +149,8 @@ export const shortlistService = {
     }
 
     const message = composeMessage({
-      recruiterName: context.recruiter.name,
+      // A deleted recruiter is rejected above, so the name is present here.
+      recruiterName: context.recruiter.name ?? 'the recruiter',
       roleTitle: context.role.title,
       assessmentInstructions: context.request.assessmentInstructions,
       adminMessage: input.message,
@@ -157,15 +173,17 @@ export const shortlistService = {
         .filter((entry) => unique.includes(entry.studentId))
         .map(async (entry) => {
           const student = byId.get(entry.studentId);
-          if (!student) return;
+          // `unique` already excludes deleted students, so a missing student or
+          // email here means the record changed mid-flight.
+          if (!student || !entry.email) return;
           try {
             await emailService.notifyStudentShortlist({
               to: entry.email,
               enabled: entry.emailNotifications,
               studentName: student.fullName,
-              recruiterName: context.recruiter.name,
+              recruiterName: context.recruiter.name ?? 'the recruiter',
               roleTitle: context.role.title,
-              instituteName: context.institute.name,
+              instituteName: context.institute.name ?? 'your institute',
               message,
               registrationUrl: context.role.registrationUrl,
             });

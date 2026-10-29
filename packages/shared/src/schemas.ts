@@ -222,6 +222,17 @@ export const notificationPreferenceSchema = z.object({
   emailNotifications: z.boolean({ required_error: 'Choose whether to receive optional emails' }),
 });
 
+/**
+ * Confirms a self-service account deletion. The account is always taken from the
+ * session, never from the body, so this payload cannot name somebody else.
+ */
+export const deleteAccountSchema = z.object({
+  password: z.string({ required_error: 'Enter your password to confirm' }).min(1, 'Enter your password to confirm'),
+  confirm: z.literal('DELETE', {
+    errorMap: () => ({ message: 'Type DELETE in capitals to confirm' }),
+  }),
+});
+
 export const instituteProfileSchema = z.object({
   website: optionalHttpUrlSchema,
   contactEmail: z.preprocess(blankToNull, emailSchema.nullable()),

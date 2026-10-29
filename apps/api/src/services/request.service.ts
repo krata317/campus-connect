@@ -51,7 +51,8 @@ async function validateSkills(instituteId: string, roles: RoleInput[]): Promise<
 async function notifyInstituteOfSubmission(request: RequestWithRoles): Promise<void> {
   try {
     const admin = await accountRepository.findAdminForInstitute(request.instituteId);
-    if (!admin) return;
+    // A missing name means the counterparty has been deleted; there is nobody to tell.
+    if (!admin || !request.instituteName || !request.recruiterName) return;
     await emailService.notifyInstituteNewRequest({
       to: admin.email,
       enabled: admin.emailNotifications,
@@ -69,7 +70,7 @@ async function notifyInstituteOfSubmission(request: RequestWithRoles): Promise<v
 async function notifyRecruiterOfSubmission(request: RequestWithRoles): Promise<void> {
   try {
     const recruiter = await accountRepository.findById('RECRUITER', request.recruiterId);
-    if (!recruiter) return;
+    if (!recruiter || !request.instituteName || !request.recruiterName) return;
     await emailService.notifyRecruiterSubmitted({
       to: recruiter.email,
       enabled: recruiter.emailNotifications,
@@ -120,6 +121,9 @@ export const requestService = {
   async update(recruiterId: string, requestId: string, input: RequestInput): Promise<RequestWithRoles> {
     const existing = await requestRepository.getForRecruiter(requestId, recruiterId);
     if (!existing) throw notFound('Hiring request not found');
+    if (existing.instituteDeleted) {
+      throw conflict('This institute no longer exists on the platform, so the request is read-only.');
+    }
     if (!canEdit(existing.status)) {
       throw conflict(`This request is ${statusText(existing.status)} and can no longer be edited`);
     }
@@ -146,6 +150,9 @@ export const requestService = {
   async submit(recruiterId: string, requestId: string): Promise<RequestWithRoles> {
     const existing = await requestRepository.getForRecruiter(requestId, recruiterId);
     if (!existing) throw notFound('Hiring request not found');
+    if (existing.instituteDeleted) {
+      throw conflict('This institute no longer exists on the platform, so the request is read-only.');
+    }
     if (!canSubmit(existing.status)) {
       throw conflict(`This request is already ${statusText(existing.status)}`);
     }
@@ -167,6 +174,9 @@ export const requestService = {
   async remove(recruiterId: string, requestId: string): Promise<void> {
     const existing = await requestRepository.getForRecruiter(requestId, recruiterId);
     if (!existing) throw notFound('Hiring request not found');
+    if (existing.instituteDeleted) {
+      throw conflict('This institute no longer exists on the platform, so the request is read-only.');
+    }
     if (existing.status !== 'DRAFT') {
       throw conflict('Only draft requests can be deleted');
     }
@@ -183,6 +193,9 @@ export const requestService = {
   ): Promise<RequestWithRoles> {
     const existing = await requestRepository.getForInstitute(requestId, instituteId);
     if (!existing) throw notFound('Hiring request not found');
+    if (existing.recruiterDeleted) {
+      throw conflict('This recruiter no longer exists on the platform, so the request is read-only.');
+    }
 
     const resolved = resolveReviewTransition(action, existing.status);
     if (!resolved.ok) {
@@ -211,7 +224,7 @@ export const requestService = {
 
     try {
       const recruiter = await accountRepository.findById('RECRUITER', updated.recruiterId);
-      if (recruiter) {
+      if (recruiter && updated.instituteName) {
         await emailService.notifyRecruiterStatus({
           to: recruiter.email,
           enabled: recruiter.emailNotifications,

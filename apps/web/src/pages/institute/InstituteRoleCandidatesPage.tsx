@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, CheckCircle2, ChevronDown, ChevronRight, Send, Users, XCircle } from 'lucide-react';
+import { DELETED_ACCOUNT_NOTICE } from '@campusconnect/shared';
 import type { CandidateEvaluation, EligibilityCheck, JobRole } from '@campusconnect/shared';
 import { api, ApiError, errorMessage } from '@/lib/api';
 import { useSkillCatalogue } from '@/hooks/useStudent';
@@ -20,7 +21,8 @@ interface CandidateResponse {
   // The API returns the recruiter who sent the request. It used to be called
   // `company`, which left this page reading an undefined field and rendering
   // nothing at all.
-  recruiter: { id: string; name: string };
+  recruiter: { id: string; name: string | null };
+  recruiterDeleted: boolean;
   candidates: CandidateEvaluation[];
   totalStudents: number;
   eligibleCount: number;
@@ -29,8 +31,10 @@ interface CandidateResponse {
 
 interface ShortlistEntry {
   studentId: string;
-  fullName: string;
-  email: string;
+  fullName: string | null;
+  email: string | null;
+  /** True when the student deleted their account; the row is history only. */
+  deleted: boolean;
   status: string;
   shortlistedAt: string | null;
   dispatchedAt: string | null;
@@ -70,9 +74,13 @@ export const InstituteRoleCandidatesPage = () => {
     queryFn: () => api.get<{ items: ShortlistEntry[] }>(`/institute/roles/${roleId}/shortlist`).then((response) => response.items),
   });
 
+  // Deleted students stay in the saved shortlist for the record, but they can no
+  // longer be selected or notified.
+  const deletedShortlisted = (shortlist.data ?? []).filter((entry) => entry.deleted);
+
   useEffect(() => {
     if (!shortlist.data) return;
-    setSelected(shortlist.data.map((entry) => entry.studentId));
+    setSelected(shortlist.data.filter((entry) => !entry.deleted).map((entry) => entry.studentId));
   }, [shortlist.data]);
 
   const saveShortlist = useMutation({
@@ -106,6 +114,7 @@ export const InstituteRoleCandidatesPage = () => {
   if (!data) return <ErrorState message="Student data is unavailable" onRetry={() => candidates.refetch()} />;
 
   const dispatched = data.role.shortlistStatus === 'DISPATCHED';
+  const locked = dispatched || data.recruiterDeleted;
   const requestApproved = data.request.status === 'APPROVED';
 
   const toggle = (studentId: string) => {
@@ -132,6 +141,20 @@ export const InstituteRoleCandidatesPage = () => {
       {!requestApproved ? (
         <Alert tone="warning" title="This request is not approved">
           Shortlisting is only available for approved requests. Current status: {data.request.status.toLowerCase().replace('_', ' ')}.
+        </Alert>
+      ) : null}
+
+      {deletedShortlisted.length > 0 ? (
+        <Alert tone="info" title="Students who have left the platform">
+          {deletedShortlisted.length} student{deletedShortlisted.length === 1 ? '' : 's'} in the saved shortlist{' '}
+          {deletedShortlisted.length === 1 ? 'has' : 'have'} deleted their account. They stay in the record but cannot be
+          selected or notified. {DELETED_ACCOUNT_NOTICE.STUDENT}
+        </Alert>
+      ) : null}
+
+      {data.recruiterDeleted ? (
+        <Alert tone="info" title="Read-only history">
+          {DELETED_ACCOUNT_NOTICE.RECRUITER} You can review the shortlist, but it can no longer be saved or dispatched.
         </Alert>
       ) : null}
 
@@ -204,7 +227,7 @@ export const InstituteRoleCandidatesPage = () => {
                       <Checkbox
                         checked={isSelected}
                         onChange={() => toggle(candidate.studentId)}
-                        disabled={dispatched || !requestApproved}
+                        disabled={locked || !requestApproved}
                         aria-label={`Select ${candidate.fullName}`}
                         className="mt-1"
                       />
@@ -312,14 +335,14 @@ export const InstituteRoleCandidatesPage = () => {
             <div className="flex gap-2">
               <Button
                 variant="outline"
-                disabled={dispatched || !requestApproved || saveShortlist.isPending}
+                disabled={locked || !requestApproved || saveShortlist.isPending}
                 onClick={() => saveShortlist.mutate()}
               >
                 {saveShortlist.isPending ? <Spinner /> : null}
                 Save shortlist
               </Button>
               <Button
-                disabled={dispatched || !requestApproved || selected.length === 0 || ineligibleSelected.length > 0}
+                disabled={locked || !requestApproved || selected.length === 0 || ineligibleSelected.length > 0}
                 onClick={() => setDispatchOpen(true)}
               >
                 <Send className="h-3.5 w-3.5" />

@@ -5,9 +5,13 @@ import type { DispatchSummary, NotificationRecord } from '@campusconnect/shared'
 
 export interface ShortlistEntry {
   studentId: string;
-  fullName: string;
-  email: string;
+  /** `null` when the student deleted their account. */
+  fullName: string | null;
+  /** `null` when the student deleted their account. */
+  email: string | null;
   emailNotifications: boolean;
+  /** True for a tombstone left behind by a deleted student. */
+  deleted: boolean;
   status: string;
   shortlistedAt: string | null;
   dispatchedAt: string | null;
@@ -24,15 +28,30 @@ export const notificationId = (roleId: string, studentId: string): string => `nt
 export const shortlistRepository = {
   async listForRole(roleId: string, instituteId: string): Promise<ShortlistEntry[]> {
     return readQuery<ShortlistEntry>(
-      `MATCH (s:Student {instituteId: $instituteId})-[r:SHORTLISTED_FOR]->(:JobRole {id: $roleId, instituteId: $instituteId})
-       OPTIONAL MATCH (s)-[:RECEIVED]->(n:Notification)-[:ABOUT_ROLE]->(:JobRole {id: $roleId})
+      // Deleted students keep their shortlist link so the historical recipient
+      // count stays right; their name and email are gone, so the page shows the
+      // "no longer exists" notice instead.
+      `MATCH (s)-[r:SHORTLISTED_FOR]->(j:JobRole {id: $roleId, instituteId: $instituteId})
+       WHERE s.instituteId = $instituteId AND (s:Student OR s:DeletedStudent)
+       OPTIONAL MATCH (s)-[:RECEIVED]->(n:Notification)-[:ABOUT_ROLE]->(j)
        RETURN s.id AS studentId, s.fullName AS fullName, s.email AS email,
               coalesce(s.emailNotifications, true) AS emailNotifications,
+              s:DeletedStudent AS deleted,
               coalesce(r.status, 'DRAFT') AS status, r.shortlistedAt AS shortlistedAt,
               r.dispatchedAt AS dispatchedAt, n.id AS notificationId, n.readAt AS readAt
-       ORDER BY s.fullName ASC`,
+       ORDER BY s:DeletedStudent ASC, coalesce(s.fullName, '') ASC`,
       { roleId, instituteId },
     );
+  },
+
+  /** Ids of shortlisted students of this institute whose account was deleted. */
+  async findDeletedStudentIds(studentIds: string[], instituteId: string): Promise<string[]> {
+    if (studentIds.length === 0) return [];
+    const rows = await readQuery<{ id: string }>(
+      'MATCH (s:DeletedStudent) WHERE s.id IN $studentIds AND s.instituteId = $instituteId RETURN s.id AS id',
+      { studentIds, instituteId },
+    );
+    return rows.map((row) => row.id);
   },
 
   async replaceShortlist(roleId: string, instituteId: string, studentIds: string[], adminId: string): Promise<number> {
@@ -89,8 +108,8 @@ export const shortlistRepository = {
 
     return withTransaction(async (tx) => {
       const context = await tx.run(
-        `MATCH (rec:Recruiter)-[:SUBMITTED]->(h:HiringRequest {instituteId: $instituteId})-[:CONTAINS_ROLE]->(j:JobRole {id: $roleId, instituteId: $instituteId})
-         MATCH (h)-[:SENT_TO]->(i:Institute)
+        `MATCH (rec)-[:SUBMITTED]->(h:HiringRequest {instituteId: $instituteId})-[:CONTAINS_ROLE]->(j:JobRole {id: $roleId, instituteId: $instituteId})
+         MATCH (h)-[:SENT_TO]->(i)
          RETURN j.shortlistStatus AS shortlistStatus, j.title AS roleTitle, j.registrationUrl AS registrationUrl,
                 h.id AS requestId, h.status AS requestStatus, rec.companyName AS recruiterName, i.name AS instituteName`,
         { roleId: input.roleId, instituteId: input.instituteId },
@@ -107,10 +126,12 @@ export const shortlistRepository = {
         throw conflict('This role has already been dispatched. Notifications were not sent again.');
       }
 
-      const recruiterName = record.get('recruiterName') as string;
+      // The service rejects a deleted recruiter before this runs, so these are
+      // normally present; the fallbacks only cover a deletion racing the dispatch.
+      const recruiterName = (record.get('recruiterName') as string | null) ?? 'the recruiter';
       const roleTitle = record.get('roleTitle') as string;
       const requestId = record.get('requestId') as string;
-      const instituteName = record.get('instituteName') as string;
+      const instituteName = (record.get('instituteName') as string | null) ?? 'your institute';
       const registrationUrl = record.get('registrationUrl') as string;
 
       await tx.run(
@@ -219,11 +240,13 @@ export const shortlistRepository = {
 
   async listDispatches(instituteId: string): Promise<DispatchSummary[]> {
     return readQuery<DispatchSummary>(
-      `MATCH (rec:Recruiter)-[:SUBMITTED]->(h:HiringRequest {instituteId: $instituteId})-[:CONTAINS_ROLE]->(j:JobRole {instituteId: $instituteId})
+      // `rec` is unlabelled so a deleted recruiter's dispatches stay in the
+      // history; the name comes back as null and the page shows the notice.
+      `MATCH (rec)-[:SUBMITTED]->(h:HiringRequest {instituteId: $instituteId})-[:CONTAINS_ROLE]->(j:JobRole {instituteId: $instituteId})
        WHERE j.shortlistStatus = 'DISPATCHED'
        CALL {
          WITH j
-         OPTIONAL MATCH (:Student)-[r:SHORTLISTED_FOR]->(j)
+         OPTIONAL MATCH ()-[r:SHORTLISTED_FOR]->(j)
          RETURN count(r) AS recipientCount
        }
        CALL {

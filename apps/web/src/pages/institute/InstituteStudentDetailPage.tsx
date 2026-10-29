@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
 import type { ProfileCompletion, StudentProfile } from '@campusconnect/shared';
 import { api, errorMessage } from '@/lib/api';
+import { DeletedNotice } from '@/components/shared/DeletedNotice';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,7 +19,7 @@ interface StudentDetail {
     roleTitle: string;
     requestId: string;
     requestTitle: string;
-    recruiterName: string;
+    recruiterName: string | null;
     status: string;
     shortlistedAt: string | null;
     dispatchedAt: string | null;
@@ -251,7 +252,7 @@ export const InstituteStudentDetailPage = () => {
                 <TBody>
                   {data.shortlistHistory.map((entry) => (
                     <TR key={`${entry.roleId}-${entry.shortlistedAt ?? ''}`}>
-                      <TD className="font-medium">{entry.recruiterName}</TD>
+                      <TD className="font-medium">{entry.recruiterName ?? <DeletedNotice kind="RECRUITER" />}</TD>
                       <TD>
                         <p>{entry.roleTitle}</p>
                         <p className="text-xs text-muted-foreground">{entry.requestTitle}</p>

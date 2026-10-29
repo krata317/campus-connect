@@ -49,8 +49,12 @@ interface RequestNode {
 
 interface RequestRow {
   request: RequestNode;
-  recruiterName: string;
-  instituteName: string;
+  /** `null` when the recruiter has deleted their account. */
+  recruiterName: string | null;
+  /** `null` when the institute has been deleted. */
+  instituteName: string | null;
+  recruiterDeleted: boolean;
+  instituteDeleted: boolean;
   reviewEvents: (ReviewEvent | null)[];
 }
 
@@ -61,8 +65,12 @@ export interface RequestWithRoles extends HiringRequest {
 export interface RoleContext {
   role: JobRole;
   request: RequestNode;
-  recruiter: { id: string; name: string };
-  institute: { id: string; name: string };
+  recruiter: { id: string; name: string | null };
+  institute: { id: string; name: string | null };
+  /** True when the recruiter deleted their account; the role is then read-only. */
+  recruiterDeleted: boolean;
+  /** True when the institute was deleted; the role is then read-only. */
+  instituteDeleted: boolean;
 }
 
 const parseCriteria = (json: string | null): JobCriteria => {
@@ -94,7 +102,9 @@ const ROLE_QUERY = `MATCH (h:HiringRequest {id: $requestId})-[:CONTAINS_ROLE]->(
 WHERE j.instituteId = $instituteId
 CALL {
   WITH j
-  OPTIONAL MATCH (:Student)-[r:SHORTLISTED_FOR]->(j)
+  // Counts every shortlist link, including links from deleted students, so the
+  // historical recipient count stays accurate.
+  OPTIONAL MATCH ()-[r:SHORTLISTED_FOR]->(j)
   RETURN count(r) AS shortlistedCount
 }
 RETURN j { .id, .title, .description, .location, .employmentType, .registrationUrl, .criteriaJson,
@@ -102,8 +112,14 @@ RETURN j { .id, .title, .description, .location, .employmentType, .registrationU
        shortlistedCount
 ORDER BY j.createdAt ASC`;
 
-const REQUEST_BASE = `MATCH (rec:Recruiter)-[:SUBMITTED]->(h:HiringRequest)
-MATCH (h)-[:SENT_TO]->(i:Institute)`;
+/**
+ * Deliberately unlabelled on `rec` and `i`: a deleted recruiter or institute is
+ * relabelled (`DeletedRecruiter` / `DeletedInstitute`) and must still appear in
+ * historical lists. The names come back as `null` and the `*Deleted` flags tell
+ * the UI to show the "no longer exists" notice.
+ */
+const REQUEST_BASE = `MATCH (rec)-[:SUBMITTED]->(h:HiringRequest)
+MATCH (h)-[:SENT_TO]->(i)`;
 
 const REQUEST_RETURN = `OPTIONAL MATCH (h)-[:HAS_REVIEW_EVENT]->(ev:ReviewEvent)
 WITH h, rec, i, ev
@@ -111,6 +127,7 @@ ORDER BY ev.at DESC
 RETURN h { .id, .title, .assessmentInstructions, .status, .recruiterId, .instituteId,
            .submittedAt, .reviewedAt, .reviewNote, .createdAt, .updatedAt } AS request,
        rec.companyName AS recruiterName, i.name AS instituteName,
+       rec:DeletedRecruiter AS recruiterDeleted, i:DeletedInstitute AS instituteDeleted,
        collect(ev { .id, .action, .fromStatus, .toStatus, .note, .actorRole, .actorId, .at }) AS reviewEvents
 ORDER BY request.createdAt DESC`;
 
@@ -123,9 +140,11 @@ const toRequest = (row: RequestRow, roles: JobRole[]): RequestWithRoles => ({
   assessmentInstructions: row.request.assessmentInstructions ?? null,
   status: row.request.status,
   recruiterId: row.request.recruiterId,
-  recruiterName: row.recruiterName,
+  recruiterName: row.recruiterName ?? null,
+  recruiterDeleted: Boolean(row.recruiterDeleted),
   instituteId: row.request.instituteId,
-  instituteName: row.instituteName,
+  instituteName: row.instituteName ?? null,
+  instituteDeleted: Boolean(row.instituteDeleted),
   submittedAt: row.request.submittedAt ?? null,
   reviewedAt: row.request.reviewedAt ?? null,
   reviewNote: row.request.reviewNote ?? null,
@@ -406,15 +425,17 @@ export const requestRepository = {
     const row = await readOne<{
       role: RoleNode;
       request: RequestNode;
-      recruiter: { id: string; name: string };
-      institute: { id: string; name: string };
+      recruiter: { id: string; name: string | null };
+      institute: { id: string; name: string | null };
+      recruiterDeleted: boolean;
+      instituteDeleted: boolean;
       shortlistedCount: number;
     }>(
-      `MATCH (rec:Recruiter)-[:SUBMITTED]->(h:HiringRequest {instituteId: $instituteId})-[:CONTAINS_ROLE]->(j:JobRole {id: $roleId, instituteId: $instituteId})
-       MATCH (h)-[:SENT_TO]->(i:Institute)
+      `MATCH (rec)-[:SUBMITTED]->(h:HiringRequest {instituteId: $instituteId})-[:CONTAINS_ROLE]->(j:JobRole {id: $roleId, instituteId: $instituteId})
+       MATCH (h)-[:SENT_TO]->(i)
        CALL {
          WITH j
-         OPTIONAL MATCH (:Student)-[r:SHORTLISTED_FOR]->(j)
+         OPTIONAL MATCH ()-[r:SHORTLISTED_FOR]->(j)
          RETURN count(r) AS shortlistedCount
        }
        RETURN j { .id, .title, .description, .location, .employmentType, .registrationUrl, .criteriaJson,
@@ -423,6 +444,7 @@ export const requestRepository = {
                   .submittedAt, .reviewedAt, .reviewNote, .createdAt, .updatedAt } AS request,
               rec { .id, name: rec.companyName } AS recruiter,
               i { .id, .name } AS institute,
+              rec:DeletedRecruiter AS recruiterDeleted, i:DeletedInstitute AS instituteDeleted,
               shortlistedCount`,
       { roleId, instituteId },
     );
@@ -432,6 +454,8 @@ export const requestRepository = {
       request: row.request,
       recruiter: row.recruiter,
       institute: row.institute,
+      recruiterDeleted: Boolean(row.recruiterDeleted),
+      instituteDeleted: Boolean(row.instituteDeleted),
     };
   },
 

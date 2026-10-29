@@ -149,10 +149,16 @@ export interface HiringRequest {
   status: RequestStatus;
   /** The recruiter who submitted the request. */
   recruiterId: string;
-  recruiterName: string;
+  /** `null` once the recruiter's account has been deleted. */
+  recruiterName: string | null;
+  /** True when the recruiter deleted their account; the request is then read-only. */
+  recruiterDeleted: boolean;
   /** The institute the request was sent to. */
   instituteId: string;
-  instituteName: string;
+  /** `null` once the institute's account has been deleted. */
+  instituteName: string | null;
+  /** True when the institute was deleted; the request is then read-only. */
+  instituteDeleted: boolean;
   submittedAt: string | null;
   reviewedAt: string | null;
   reviewNote: string | null;
@@ -289,7 +295,8 @@ export interface DispatchSummary {
   roleTitle: string;
   requestId: string;
   requestTitle: string;
-  recruiterName: string;
+  /** `null` once the recruiter's account has been deleted. */
+  recruiterName: string | null;
   dispatchedAt: string | null;
   recipientCount: number;
   readCount: number;

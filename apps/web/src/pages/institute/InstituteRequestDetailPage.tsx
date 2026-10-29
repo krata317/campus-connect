@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Check, Users, X } from 'lucide-react';
+import { DELETED_ACCOUNT_NOTICE } from '@campusconnect/shared';
 import type { HiringRequest } from '@campusconnect/shared';
 import { api, errorMessage } from '@/lib/api';
 import { useSkillCatalogue } from '@/hooks/useStudent';
@@ -43,14 +44,15 @@ export const InstituteRequestDetailPage = () => {
   if (request.isError) return <ErrorState message={errorMessage(request.error)} onRetry={() => request.refetch()} />;
 
   const data = request.data as HiringRequest;
-  const canReview = data.status === 'SUBMITTED';
-  const canReject = data.status === 'SUBMITTED' || data.status === 'CHANGES_REQUESTED';
+  // A request from a deleted recruiter is history: read-only everywhere.
+  const canReview = data.status === 'SUBMITTED' && !data.recruiterDeleted;
+  const canReject = (data.status === 'SUBMITTED' || data.status === 'CHANGES_REQUESTED') && !data.recruiterDeleted;
 
   return (
     <div className="space-y-5">
       <PageHeader
         title={data.title}
-        description={`${data.recruiterName} · submitted ${formatDateTime(data.submittedAt)}`}
+        description={`${data.recruiterDeleted ? DELETED_ACCOUNT_NOTICE.RECRUITER : data.recruiterName} · submitted ${formatDateTime(data.submittedAt)}`}
         actions={
           <Link to="/institute/requests" className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}>
             <ArrowLeft className="h-3.5 w-3.5" />
@@ -63,6 +65,12 @@ export const InstituteRequestDetailPage = () => {
         <Badge variant={statusTone(data.status)}>{statusLabel(data.status)}</Badge>
         <span className="text-xs text-muted-foreground">Last updated {formatDateTime(data.updatedAt)}</span>
       </div>
+
+      {data.recruiterDeleted ? (
+        <Alert tone="info" title="Read-only history">
+          {DELETED_ACCOUNT_NOTICE.RECRUITER} The request and its shortlists stay visible for your records, but it can no longer be reviewed, shortlisted or dispatched.
+        </Alert>
+      ) : null}
 
       {data.reviewNote ? (
         <Alert tone={data.status === 'REJECTED' ? 'error' : 'warning'} title="Latest review note">

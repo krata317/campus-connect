@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { BellRing } from 'lucide-react';
 import type { DispatchSummary } from '@campusconnect/shared';
 import { api, errorMessage } from '@/lib/api';
+import { DeletedNotice } from '@/components/shared/DeletedNotice';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -59,7 +60,7 @@ export const InstituteDispatchesPage = () => {
             <TBody>
               {items.map((item) => (
                 <TR key={item.roleId}>
-                  <TD className="font-medium text-foreground">{item.recruiterName}</TD>
+                  <TD className="font-medium text-foreground">{item.recruiterName ?? <DeletedNotice kind="RECRUITER" />}</TD>
                   <TD>{item.roleTitle}</TD>
                   <TD className="text-muted-foreground">{item.requestTitle}</TD>
                   <TD>

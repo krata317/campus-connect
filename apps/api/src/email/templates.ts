@@ -234,6 +234,54 @@ export function passwordResetEmail(params: { link: string; expiresInMinutes: num
   return { subject, html, text };
 }
 
+export function accountDeletedEmail(params: {
+  roleLabel: string;
+  email: string;
+  removedStudents: number;
+}): RenderedEmail {
+  const subject = 'Your Campus Connect account has been deleted';
+  const paragraphs = [
+    `The ${params.roleLabel} account registered to <strong>${escapeHtml(params.email)}</strong> and its profile data have been permanently deleted.`,
+  ];
+  if (params.removedStudents > 0) {
+    paragraphs.push(
+      `The ${params.removedStudents} student account${params.removedStudents === 1 ? '' : 's'} held by this institute ${
+        params.removedStudents === 1 ? 'has' : 'have'
+      } also been deleted, as described on the settings page.`,
+    );
+  }
+  paragraphs.push(
+    'Historical shortlist and hiring records that other people rely on are kept, but they no longer contain your personal details and show a notice instead of your name.',
+    'This cannot be undone, and the account cannot be restored.',
+  );
+
+  const html = layout({
+    heading: 'Your account has been deleted',
+    intro: 'This is a confirmation that the deletion you requested is complete.',
+    paragraphs,
+    note: 'If you did not request this, contact your placement cell immediately.',
+  });
+
+  const text = [
+    'Your Campus Connect account has been deleted',
+    '',
+    `The ${params.roleLabel} account registered to ${params.email} and its profile data have been permanently deleted.`,
+    ...(params.removedStudents > 0
+      ? [
+          `The ${params.removedStudents} student account${params.removedStudents === 1 ? '' : 's'} held by this institute ${
+            params.removedStudents === 1 ? 'has' : 'have'
+          } also been deleted.`,
+        ]
+      : []),
+    'Historical shortlist and hiring records are kept without your personal details.',
+    'This cannot be undone, and the account cannot be restored.',
+    '',
+    'If you did not request this, contact your placement cell immediately.',
+  ].join('\n');
+
+  return { subject, html, text };
+}
+
 export function hiringRequestInstituteEmail(params: {
   instituteName: string;
   recruiterName: string;

@@ -29,6 +29,7 @@ export const LoginPage = () => {
   const queryClient = useQueryClient();
   const [params] = useSearchParams();
   const expired = params.get('expired') === '1';
+  const deleted = params.get('deleted') === '1';
   const location = useLocation();
 
   const {
@@ -110,6 +111,13 @@ export const LoginPage = () => {
       </div>
 
       <form className="space-y-4" onSubmit={handleSubmit(onSubmit)} noValidate>
+        {deleted ? (
+          <Alert tone="success" title="Your account was deleted">
+            It has been removed along with its profile data. A confirmation email is on its way to the address on the
+            account.
+          </Alert>
+        ) : null}
+
         {expired ? (
           <Alert tone="info" title="You were signed out">
             Your session ended. Sign in again to continue — tick “Remember me” to stay signed in for 7 days.

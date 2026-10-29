@@ -1,11 +1,13 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Copy, KeyRound, ShieldAlert } from 'lucide-react';
+import { Check, Copy, KeyRound, ShieldAlert, Trash2 } from 'lucide-react';
 import type { AuthUser } from '@campusconnect/shared';
-import { Alert, LoadingState, PageHeader } from '@/components/ui/feedback';
+import { Alert, LoadingState, PageHeader, Spinner } from '@/components/ui/feedback';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Field, Input } from '@/components/ui/form';
 import { api, errorMessage } from '@/lib/api';
 import { meQueryKey, useCurrentUser } from '@/hooks/useAuth';
@@ -28,6 +30,34 @@ const roleLabel = (role: string): string => {
   return 'Institute administrator';
 };
 
+/** What actually disappears, per account type. Shown before the password prompt. */
+const deletionConsequences = (role: string): string[] => {
+  if (role === 'STUDENT') {
+    return [
+      'Your account, profile, education, experience and skills are deleted immediately.',
+      'Your name disappears from your institute’s student list.',
+      'Notifications you received are deleted.',
+      'Shortlists you were part of stay in your institute’s history, but they show “This student no longer exists on the platform.” instead of your details.',
+      'You are signed out everywhere and cannot sign in again.',
+    ];
+  }
+  if (role === 'RECRUITER') {
+    return [
+      'Your account, company profile and contact details are deleted immediately.',
+      'Hiring requests you already sent stay visible to the institutes you sent them to, but they become read-only and show “This recruiter no longer exists on the platform.”',
+      'Institutes can no longer approve, shortlist or dispatch those requests.',
+      'You are signed out everywhere and cannot sign in again.',
+    ];
+  }
+  return [
+    'Your institute account and administrator login are deleted immediately.',
+    'Every student account belonging to this institute is deleted as well, along with their profiles and notifications.',
+    'Recruiters keep the hiring requests they sent you as read-only history, shown as “This institute no longer exists on the platform.”',
+    'Your skill catalogue is deleted along with the institute.',
+    'You are signed out everywhere and cannot sign in again.',
+  ];
+};
+
 export const SettingsPage = () => {
   const { user, isLoading } = useCurrentUser();
   const queryClient = useQueryClient();
@@ -37,6 +67,10 @@ export const SettingsPage = () => {
   const [website, setWebsite] = useState<string | null>(null);
   const [contactEmail, setContactEmail] = useState<string | null>(null);
   const [contactPhone, setContactPhone] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState('');
+  const navigate = useNavigate();
 
   const isInstituteAdmin = user?.role === 'INSTITUTE_ADMIN';
 
@@ -77,6 +111,17 @@ export const SettingsPage = () => {
         contactPhone: contactPhone ?? institute.data?.contactPhone ?? null,
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['institute', 'settings'] }),
+  });
+
+  const deleteAccount = useMutation({
+    mutationFn: () => api.post('/settings/delete-account', { password: deletePassword, confirm: deleteConfirm }),
+    onSuccess: () => {
+      // The server already dropped every session; clear the cache so nothing
+      // cached for this account survives in the browser.
+      queryClient.clear();
+      navigate('/login?deleted=1', { replace: true });
+    },
+    onError: () => setDeletePassword(''),
   });
 
   if (isLoading || !user) return <LoadingState label="Loading settings" />;
@@ -307,6 +352,98 @@ export const SettingsPage = () => {
           </div>
         </>
       ) : null}
+
+      <Card className="border-destructive/40">
+        <CardHeader>
+          <CardTitle>Delete account</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            Deleting your {roleLabel(user.role).toLowerCase()} account is permanent and happens immediately. Here is
+            exactly what that means for you:
+          </p>
+          <ul className="list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-muted-foreground">
+            {deletionConsequences(user.role).map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-xs leading-relaxed text-destructive">
+            There is no waiting period and no recovery. A confirmation email is sent before anything is removed.
+          </div>
+
+          <Button variant="destructive" onClick={() => setDeleteOpen(true)}>
+            <Trash2 className="h-4 w-4" />
+            Delete my account
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Dialog
+        open={deleteOpen}
+        onOpenChange={(open) => {
+          setDeleteOpen(open);
+          if (!open) {
+            setDeletePassword('');
+            setDeleteConfirm('');
+            deleteAccount.reset();
+          }
+        }}
+      >
+        <DialogContent
+          title="Delete your account permanently?"
+          description="This cannot be undone. Confirm with your password to continue."
+        >
+          <div className="space-y-4">
+            <Alert tone="warning" title="This is permanent">
+              {user.role === 'INSTITUTE_ADMIN'
+                ? 'Your institute account and every student account belonging to it will be deleted immediately.'
+                : 'Your account and profile will be deleted immediately.'}
+            </Alert>
+
+            {deleteAccount.isError ? <Alert tone="error">{errorMessage(deleteAccount.error)}</Alert> : null}
+
+            <Field label="Your password" htmlFor="deletePassword" required>
+              <Input
+                id="deletePassword"
+                type="password"
+                autoComplete="current-password"
+                value={deletePassword}
+                onChange={(event) => setDeletePassword(event.target.value)}
+              />
+            </Field>
+
+            <Field
+              label="Type DELETE to confirm"
+              htmlFor="deleteConfirm"
+              hint="Capitals, exactly as shown"
+              error={deleteConfirm.length > 0 && deleteConfirm !== 'DELETE' ? 'Type DELETE in capitals' : undefined}
+              required
+            >
+              <Input
+                id="deleteConfirm"
+                value={deleteConfirm}
+                onChange={(event) => setDeleteConfirm(event.target.value)}
+                autoComplete="off"
+              />
+            </Field>
+
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleteAccount.isPending}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={deleteAccount.isPending || deletePassword.length === 0 || deleteConfirm !== 'DELETE'}
+                onClick={() => deleteAccount.mutate()}
+              >
+                {deleteAccount.isPending ? <Spinner /> : <Trash2 className="h-3.5 w-3.5" />}
+                Delete permanently
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

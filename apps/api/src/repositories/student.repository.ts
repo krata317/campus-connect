@@ -335,13 +335,13 @@ export const studentRepository = {
       roleTitle: string;
       requestId: string;
       requestTitle: string;
-      recruiterName: string;
+      recruiterName: string | null;
       status: string;
       shortlistedAt: string | null;
       dispatchedAt: string | null;
       notificationReadAt: string | null;
     }>(
-      `MATCH (s:Student {id: $studentId, instituteId: $instituteId})-[r:SHORTLISTED_FOR]->(j:JobRole)<-[:CONTAINS_ROLE]-(h:HiringRequest)<-[:SUBMITTED]-(rec:Recruiter)
+      `MATCH (s:Student {id: $studentId, instituteId: $instituteId})-[r:SHORTLISTED_FOR]->(j:JobRole)<-[:CONTAINS_ROLE]-(h:HiringRequest)<-[:SUBMITTED]-(rec)
        OPTIONAL MATCH (s)-[:RECEIVED]->(n:Notification)-[:ABOUT_ROLE]->(j)
        RETURN j.id AS roleId, j.title AS roleTitle, h.id AS requestId, h.title AS requestTitle,
               rec.companyName AS recruiterName,
