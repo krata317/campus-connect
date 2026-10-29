@@ -257,6 +257,9 @@ the student registers, the institute reviews and approves the request, and the
 shared code is retired. Until then the existing student code keeps working
 exactly as described above.
 
+### Resume upload and auto-fill
+Support for students to upload their resumes directly to the platform. An automated parsing system will extract relevant details such as education, experience, and skills to pre-fill and update the student profile, streamlining onboarding and profile management.
+
 ---
 
 ## For developers

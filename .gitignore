@@ -13,3 +13,4 @@ npm-debug.log*
 .vite/
 .workbuddy-ai/
 apps/web/.tmp/
+DEPLOYMENT.md
